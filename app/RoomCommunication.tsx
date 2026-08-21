@@ -50,6 +50,9 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
   const [callMinimized, setCallMinimized] = useState(false);
   const [callStatus, setCallStatus] = useState("");
   const [tray, setTray] = useState<"emoji" | "sticker" | null>(null);
+  const [replying, setReplying] = useState<Message | null>(null);
+  const [lastSeenCount, setLastSeenCount] = useState(0);
+  const [quality, setQuality] = useState("Checking connection");
   const channelRef = useRef<RealtimeChannel | null>(null);
   const endCallRef = useRef<(notify?: boolean) => void>(() => undefined);
   const peerRef = useRef<RTCPeerConnection | null>(null);
@@ -132,8 +135,27 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
   }, [nightId, userId]);
 
   useEffect(() => {
-    if (chatOpen) messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatOpen) {
+      messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const markRead = window.setTimeout(() => setLastSeenCount(messages.length), 0);
+      return () => window.clearTimeout(markRead);
+    }
   }, [messages, chatOpen]);
+
+  useEffect(() => {
+    if (!callMode) return;
+    const inspect = window.setInterval(async () => {
+      const reports = await peerRef.current?.getStats();
+      let next = "Connecting";
+      reports?.forEach((report) => {
+        if (report.type === "candidate-pair" && report.state === "succeeded" && report.currentRoundTripTime != null) {
+          next = report.currentRoundTripTime < 0.15 ? "Strong connection" : report.currentRoundTripTime < 0.35 ? "Fair connection" : "Weak connection";
+        }
+      });
+      setQuality(next);
+    }, 3000);
+    return () => window.clearInterval(inspect);
+  }, [callMode]);
 
   function stopMedia() {
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -273,9 +295,11 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
-    const body = draft.trim();
+    const text = draft.trim();
+    const body = replying ? `↪ ${replying.body.slice(0, 80)}\n${text}` : text;
     if (!body) return;
     setDraft("");
+    setReplying(null);
     const { error } = await supabase.from("twf_room_messages").insert({
       game_night_id: nightId,
       sender_id: userId,
@@ -311,7 +335,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
           <video ref={localVideoRef} autoPlay muted playsInline aria-label="Your video" />
           <div className="callIdentity">
             <b>{partnerName}</b>
-            <span>{callStatus}</span>
+            <span>{callStatus} · {quality}</span>
           </div>
           <div className="callControls">
             <button onClick={() => setCallMinimized((value) => !value)}>
@@ -344,11 +368,13 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
                   </span>
                 ) : <span>{message.body}</span>}
                 <time>{new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+                <button className="replyMessage" onClick={() => setReplying(message)}>Reply</button>
               </div>
             ))}
             <div ref={messageEndRef} />
           </div>
           <div className="chatComposer">
+            {replying && <div className="replyPreview"><span>Replying to {replying.sender_id === userId ? "your message" : partnerName}</span><button onClick={() => setReplying(null)}>×</button></div>}
             {tray && (
               <div className={tray === "emoji" ? "emojiTray" : "stickerTray"}>
                 {tray === "emoji" ? CHAT_EMOJIS.map((emoji) => (
@@ -372,7 +398,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
 
       <div className={"commDock" + (callMode ? " inCall" : "")} aria-label="Room communication controls">
         <button onClick={() => setChatOpen((open) => !open)}>
-          Chat{messages.length ? ` (${messages.length})` : ""}
+          Chat{Math.max(0, messages.length - lastSeenCount) > 0 ? ` (${Math.max(0, messages.length - lastSeenCount)})` : ""}
         </button>
         {!callMode && (
           <>

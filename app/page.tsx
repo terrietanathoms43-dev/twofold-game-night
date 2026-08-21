@@ -28,6 +28,8 @@ type Night = {
   current_round: number;
   created_by: string;
   winner_id: string | null;
+  play_style?: "competitive" | "cooperative";
+  difficulty?: "easy" | "standard" | "hard";
 };
 type Round = {
   id: string;
@@ -141,10 +143,16 @@ export default function Home() {
     [historyPlayers, setHistoryPlayers] = useState<any[]>([]),
     [gameResults, setGameResults] = useState<any[]>([]),
     [ratings, setRatings] = useState<any[]>([]),
+    [favorites, setFavorites] = useState<string[]>([]),
+    [savedLineups, setSavedLineups] = useState<string[][]>([]),
+    [playStyle, setPlayStyle] = useState<"competitive" | "cooperative">("competitive"),
+    [difficulty, setDifficulty] = useState<"easy" | "standard" | "hard">("standard"),
     [online, setOnline] = useState(true),
     [copied, setCopied] = useState(false),
     [msg, setMsg] = useState(""),
     [busy, setBusy] = useState(false);
+  const gameCategories = ["Couple", "Competitive", "Party", "Creative", "Cooperative"];
+  const preferenceCoupleId = couple?.id;
   useEffect(() => {
     supabase.auth.getSession().then((x) => {
       setSession(x.data.session);
@@ -153,6 +161,22 @@ export default function Home() {
     const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => data.subscription.unsubscribe();
   }, []);
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (!preferenceCoupleId) return;
+    const loadPreferences = window.setTimeout(() => {
+      try {
+        setFavorites(JSON.parse(localStorage.getItem(`twf-favorites-${preferenceCoupleId}`) || "[]"));
+        setSavedLineups(JSON.parse(localStorage.getItem(`twf-lineups-${preferenceCoupleId}`) || "[]"));
+      } catch {
+        setFavorites([]);
+        setSavedLineups([]);
+      }
+    }, 0);
+    return () => window.clearTimeout(loadPreferences);
+  }, [preferenceCoupleId]);
   useEffect(() => {
     if (session?.user) loadAccount(session.user.id);
   }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed only to the authenticated user
@@ -486,6 +510,8 @@ export default function Home() {
     setBusy(true);
     const { data: n, error } = await supabase.rpc("twf_create_game_night", {
       p_game_keys: selected,
+      p_play_style: playStyle,
+      p_difficulty: difficulty,
     });
     if (error) {
       setMsg(error.message);
@@ -497,6 +523,26 @@ export default function Home() {
     await loadPlayers(n.id);
     setView("lobby");
     setBusy(false);
+  }
+  function quickPlay() {
+    const picks = gameCategories.flatMap((name) => {
+      const pool = GAMES.filter((item) => item.category === name);
+      return pool.length ? [pool[Math.floor(Math.random() * pool.length)].key] : [];
+    });
+    setSelected(picks.slice(0, 5));
+    setMsg("A balanced five-game lineup is ready.");
+  }
+  function toggleFavorite(key: string) {
+    const next = favorites.includes(key) ? favorites.filter((item) => item !== key) : [...favorites, key];
+    setFavorites(next);
+    if (couple) localStorage.setItem(`twf-favorites-${couple.id}`, JSON.stringify(next));
+  }
+  function saveLineup() {
+    if (!couple || !selected.length) return;
+    const next = [selected, ...savedLineups.filter((lineup) => lineup.join("|") !== selected.join("|"))].slice(0, 5);
+    setSavedLineups(next);
+    localStorage.setItem(`twf-lineups-${couple.id}`, JSON.stringify(next));
+    setMsg("Lineup saved on this device.");
   }
   function moveSelected(gameKey: string, direction: -1 | 1) {
     setSelected((current) => {
@@ -591,9 +637,16 @@ export default function Home() {
     if (!night) return getPrompt(gameKey, 0);
     const definition = GAMES.find((item) => item.key === gameKey);
     const fullPool = definition?.mode === "speed" ? definition.prompts : getPromptPool(gameKey);
-    const candidatePool = definition?.mode === "speed"
+    let candidatePool = definition?.mode === "speed"
       ? fullPool.filter((_, index) => index % 3 === roundIndex % 3)
       : fullPool;
+    const level = night.difficulty || difficulty;
+    if (candidatePool.length > 12) {
+      const third = Math.ceil(candidatePool.length / 3);
+      candidatePool = level === "easy" ? candidatePool.slice(0, third)
+        : level === "hard" ? candidatePool.slice(third * 2)
+          : candidatePool.slice(third, third * 2);
+    }
     const { data, error } = await supabase.rpc("twf_pick_fresh_prompt", {
       p_game_night_id: night.id,
       p_game_key: gameKey,
@@ -731,6 +784,20 @@ export default function Home() {
     else await loadGameState(night.id);
     setBusy(false);
   }
+  async function reportQuestion() {
+    if (!night || !activeRound) return;
+    const reason = window.prompt("What is wrong with this question?", "Incorrect or unclear");
+    if (!reason?.trim()) return;
+    const { error } = await supabase.from("twf_question_reports").insert({
+      game_night_id: night.id,
+      round_id: activeRound.id,
+      reporter_id: profile!.id,
+      game_key: game.key,
+      prompt,
+      reason: reason.trim().slice(0, 500),
+    });
+    setMsg(error ? error.message : "Question reported. Thank you for helping improve Twofold.");
+  }
   async function rateCreative(rating: number) {
     if (!activeRound || !partner || !night) return;
     setBusy(true);
@@ -784,7 +851,7 @@ export default function Home() {
     isPersonalTarget = personalTarget === profile.id,
     turnActor = round % 2 === 0 ? couple.member_one : couple.member_two,
     isActor = turnActor === profile.id,
-    roleGame = ["charades", "dontsay", "describe"].includes(game.key),
+    roleGame = ["charades", "dontsay", "describe", "secretSignal", "voiceImpression"].includes(game.key),
     creativeNeedsRating = ["draw", "caption", "story"].includes(game.key),
     myRating = ratings.find((item) => item.voter_id === profile.id)?.rating,
     displayPrompt =
@@ -979,7 +1046,7 @@ export default function Home() {
                     className="secondary"
                     onClick={() => setView("games")}
                   >
-                    Browse all 22 games
+                    Browse all {GAMES.length} games
                   </button>
                 </div>
               </div>
@@ -1008,7 +1075,7 @@ export default function Home() {
                 <sup>♡</sup>
                 <small>GAMES AVAILABLE</small>
                 <h3>{GAMES.length}</h3>
-                <p>Across four collections</p>
+                <p>Across five collections</p>
               </article>
               <article>
                 <sup>✦</sup>
@@ -1033,7 +1100,7 @@ export default function Home() {
                 <small>♡ EXPLORE TWOFOLD</small>
                 <h1>Find your next favorite</h1>
                 <p>
-                  All 22 games are here—browse freely, then build your perfect
+                  All {GAMES.length} games are here—browse freely, then build your perfect
                   night.
                 </p>
               </div>
@@ -1045,7 +1112,7 @@ export default function Home() {
               />
             </section>
             <div className="categoryPills">
-              {["All", "Couple", "Competitive", "Party", "Creative"].map(
+              {["All", ...gameCategories].map(
                 (c) => {
                   const count =
                     c === "All"
@@ -1132,23 +1199,42 @@ export default function Home() {
                 <b>{selected.length}</b> selected
               </div>
             </div>
-            <div className="setupFilters" aria-label="Filter games by category">
-              {[
-                ["All", "All games"],
-                ["Couple", "♡ Couple"],
-                ["Competitive", "⚡ Competitive"],
-                ["Party", "✦ Party"],
-                ["Creative", "✎ Creative"],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  className={category === value ? "active" : ""}
-                  onClick={() => setCategory(value)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <section className="setupShortcuts">
+              <div>
+                <small>QUICK START</small>
+                <h2>Build a balanced night instantly</h2>
+                <p>Quick Play chooses one game from each collection. You can still rearrange everything.</p>
+              </div>
+              <button className="primary" onClick={quickPlay}>✦ Quick Play</button>
+              <button className="secondary" disabled={!selected.length} onClick={saveLineup}>Save lineup</button>
+            </section>
+            <section className="nightSettings" aria-label="Game-night settings">
+              <label>
+                <span>Play style</span>
+                <select value={playStyle} onChange={(event) => setPlayStyle(event.target.value as "competitive" | "cooperative")}>
+                  <option value="competitive">Competitive · crown a winner</option>
+                  <option value="cooperative">Cooperative · build one team score</option>
+                </select>
+              </label>
+              <label>
+                <span>Difficulty</span>
+                <select value={difficulty} onChange={(event) => setDifficulty(event.target.value as "easy" | "standard" | "hard")}>
+                  <option value="easy">Easy</option>
+                  <option value="standard">Standard</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </label>
+            </section>
+            {savedLineups.length > 0 && (
+              <div className="savedLineups">
+                <b>Saved lineups</b>
+                {savedLineups.map((lineup, index) => (
+                  <button key={lineup.join("-")} onClick={() => setSelected(lineup)}>
+                    Lineup {index + 1} · {lineup.length} games
+                  </button>
+                ))}
+              </div>
+            )}
             <section className="lineupBuilder" aria-label="Selected game lineup">
               <div className="lineupBuilderHead">
                 <div>
@@ -1214,28 +1300,31 @@ export default function Home() {
                 <p className="emptyLineup">Choose at least one game below.</p>
               )}
             </section>
-            <div className="games">
-              {GAMES.filter(
-                (g) => category === "All" || g.category === category,
-              ).map((g) => (
-                <button
-                  key={g.key}
-                  className={selected.includes(g.key) ? "selected" : ""}
-                  onClick={() =>
-                    setSelected((s) =>
-                      s.includes(g.key)
-                        ? s.filter((x) => x !== g.key)
-                        : [...s, g.key],
-                    )
-                  }
-                >
-                  <i>{selected.includes(g.key) ? "✓" : "+"}</i>
-                  <b className="gameIcon">{g.icon}</b>
-                  <small>{g.category}</small>
-                  <h3>{g.title}</h3>
-                  <p>{g.instructions}</p>
-                </button>
-              ))}
+            <div className="categoryGroups">
+              {gameCategories.map((group, groupIndex) => {
+                const groupGames = GAMES.filter((item) => item.category === group);
+                const selectedCount = groupGames.filter((item) => selected.includes(item.key)).length;
+                return (
+                  <details key={group} open={groupIndex === 0 || selectedCount > 0}>
+                    <summary>
+                      <span><b>{group}</b><small>{groupGames.length} games</small></span>
+                      <em>{selectedCount ? `${selectedCount} selected` : "Open collection"}</em>
+                    </summary>
+                    <div className="games">
+                      {groupGames.map((g) => (
+                        <div role="button" tabIndex={0} key={g.key} className={selected.includes(g.key) ? "selected" : ""} onClick={() => setSelected((items) => items.includes(g.key) ? items.filter((item) => item !== g.key) : [...items, g.key])} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected((items) => items.includes(g.key) ? items.filter((item) => item !== g.key) : [...items, g.key]); } }}>
+                          <i>{selected.includes(g.key) ? "✓" : "+"}</i>
+                          <button type="button" className="favoriteGame" aria-label={`${favorites.includes(g.key) ? "Remove" : "Add"} ${g.title} ${favorites.includes(g.key) ? "from" : "to"} favourites`} onClick={(event) => { event.stopPropagation(); toggleFavorite(g.key); }}>{favorites.includes(g.key) ? "★" : "☆"}</button>
+                          <b className="gameIcon">{g.icon}</b>
+                          <small>{g.category} · 100 prompts</small>
+                          <h3>{g.title}</h3>
+                          <p>{g.instructions}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                );
+              })}
             </div>
             <footer>
               <span>
@@ -1366,6 +1455,12 @@ export default function Home() {
               </small>
               <h1>{displayPrompt}</h1>
               <p>{answerGuidance}</p>
+              <details className="gameTutorial">
+                <summary>How this round works</summary>
+                <p>{game.instructions}</p>
+                <small>{game.mode === "speed" ? "Correct answers score 100 points, with a 25-point first-answer bonus." : "Lock answers privately. Both answers reveal only after the round closes."}</small>
+              </details>
+              <button className="reportQuestion" onClick={reportQuestion}>Report a problem with this question</button>
               {!roundRevealed && !iAnswered && !partnerAnswered && (
                 <div className="skipQuestion">
                   {skipStatus === "requested" ? (
@@ -1556,16 +1651,25 @@ export default function Home() {
             <div className="cup">♕</div>
             <small>GAME NIGHT COMPLETE</small>
             <h1>
-              {night.winner_id === profile.id
+              {night.play_style === "cooperative"
+                ? "Team victory!"
+                : night.winner_id === profile.id
                 ? profile.display_name + " wins!"
                 : night.winner_id === partner?.id
                   ? partner?.display_name + " wins!"
                   : "It’s a tie!"}
             </h1>
             <p>
-              {profile.display_name}: {myScore} points · {partner?.display_name}
-              : {partnerScore} points
+              {night.play_style === "cooperative"
+                ? `Together you earned ${myScore + partnerScore} points.`
+                : `${profile.display_name}: ${myScore} points · ${partner?.display_name}: ${partnerScore} points`}
             </p>
+            <section className="nightRecap">
+              <article><b>{selected.length}</b><span>Games completed</span></article>
+              <article><b>{selected.length * 3}</b><span>Questions played</span></article>
+              <article><b>{myScore + partnerScore}</b><span>Combined points</span></article>
+              <article><b>{night.play_style === "cooperative" ? "Team" : "Final"}</b><span>{night.play_style === "cooperative" ? "Shared achievement" : "Winner recorded"}</span></article>
+            </section>
             <button
               className="primary"
               onClick={() => {
@@ -2216,7 +2320,7 @@ function choiceOptions(
   me: string,
   partner: string,
 ) {
-  if (gameKey === "would") {
+  if (["would", "blitz"].includes(gameKey)) {
     const cleaned = prompt.replace(/\?$/, "");
     const parts = cleaned.split(/\s+or\s+/i);
     if (parts.length === 2) return parts;
@@ -2462,6 +2566,7 @@ function CustomQuestionManager({
 }) {
   const [q, setQ] = useState(""),
     [g, setG] = useState("memory"),
+    [search, setSearch] = useState(""),
     [editing, setEditing] = useState<string | null>(null),
     [editValue, setEditValue] = useState("");
   return (
@@ -2498,11 +2603,12 @@ function CustomQuestionManager({
           Add question
         </button>
       </form>
+      <input className="questionSearch" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search your couple questions…" aria-label="Search custom questions" />
       <div className="customList">
         {questions.length === 0 ? (
           <p>No custom questions yet.</p>
         ) : (
-          questions.map((item) => (
+          questions.filter((item) => item.question.toLowerCase().includes(search.toLowerCase()) || item.game_key.toLowerCase().includes(search.toLowerCase())).map((item) => (
             <div key={item.id}>
               {editing === item.id ? (
                 <div className="customEdit">

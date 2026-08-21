@@ -1452,6 +1452,43 @@ body {
 .chatSticker { display: grid; justify-items: center; min-width: 105px; padding: 5px; }
 .chatSticker b { font-size: 42px; line-height: 1; }
 .chatSticker small { font-size: 13px; font-weight: 750; }
+.replyMessage { border: 0; background: transparent; color: inherit; opacity: .72; padding: 2px 0; font-size: 13px; text-align: left; }
+.replyPreview { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px 0; color: var(--muted); font-size: 13px; }
+.replyPreview button { border: 0; background: transparent; color: var(--plum); font-size: 20px; }
+
+.setupShortcuts { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 20px; border: 1px solid #ead9e5; border-radius: 20px; background: linear-gradient(135deg,#fff0f6,#f2edff); }
+.setupShortcuts > div { flex: 1; }
+.setupShortcuts small { color: #a34f73; font-size: 13px; font-weight: 800; letter-spacing: 1.2px; }
+.setupShortcuts h2 { margin: 5px 0; font: 23px Georgia; }
+.setupShortcuts p { margin: 0; color: var(--muted); font-size: 13px; }
+.nightSettings { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.nightSettings label { display: grid; gap: 6px; font-size: 13px; font-weight: 800; color: var(--plum); }
+.nightSettings select { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.savedLineups { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0 18px; }
+.savedLineups button { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: #fff; color: var(--plum); font-size: 13px; }
+.categoryGroups { display: grid; gap: 13px; margin-bottom: 100px; }
+.categoryGroups > details { border: 1px solid var(--line); border-radius: 18px; background: #fff; overflow: hidden; }
+.categoryGroups > details > summary { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; cursor: pointer; list-style: none; }
+.categoryGroups summary span { display: grid; gap: 3px; }
+.categoryGroups summary b { font: 22px Georgia; color: var(--plum); }
+.categoryGroups summary small,.categoryGroups summary em { font-size: 13px; color: var(--muted); font-style: normal; }
+.categoryGroups .games { padding: 0 16px 16px; }
+.categoryGroups .games > div { text-align: left; min-height: 190px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 18px; position: relative; color: var(--ink); cursor: pointer; transition: .2s ease; }
+.categoryGroups .games > div:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(69,35,75,.1); }
+.categoryGroups .games > div.selected { border: 2px solid var(--plum); background: #fcf8fb; }
+.categoryGroups .games > div > i { position: absolute; right: 12px; top: 12px; width: 25px; height: 25px; border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; font-style: normal; }
+.categoryGroups .games > div.selected > i { background: var(--plum); color: #fff; }
+.favoriteGame { position: absolute; right: 43px; top: 10px; border: 0; background: transparent; color: #d45782; font-size: 23px; }
+.gameTutorial { max-width: 620px; margin: 15px auto; padding: 12px 15px; border: 1px solid var(--line); border-radius: 13px; background: #fff; text-align: left; }
+.gameTutorial summary { cursor: pointer; color: var(--plum); font-weight: 800; }
+.gameTutorial p,.gameTutorial small { font-size: 13px; color: var(--muted); }
+.reportQuestion { border: 0; background: transparent; color: #8a6f81; text-decoration: underline; font-size: 13px; }
+.nightRecap { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin: 24px 0; }
+.nightRecap article { display: grid; gap: 5px; padding: 15px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.nightRecap b { font: 25px Georgia; color: var(--plum); }
+.nightRecap span { font-size: 13px; color: var(--muted); }
+.questionSearch { width: 100%; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+@media(max-width:760px){.setupShortcuts{align-items:stretch;flex-direction:column}.setupShortcuts button{width:100%}.nightSettings{grid-template-columns:1fr}.categoryGroups .games{grid-template-columns:1fr}.nightRecap{grid-template-columns:1fr 1fr}}
 .incomingCall {
   position: fixed;
   z-index: 60;
