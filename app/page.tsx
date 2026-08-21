@@ -141,6 +141,7 @@ export default function Home() {
     [gameResults, setGameResults] = useState<any[]>([]),
     [ratings, setRatings] = useState<any[]>([]),
     [online, setOnline] = useState(true),
+    [copied, setCopied] = useState(false),
     [msg, setMsg] = useState(""),
     [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -494,6 +495,27 @@ export default function Home() {
     await loadGameState(n.id);
     setView("lobby");
   }
+  async function shareRoom() {
+    if (!night) return;
+    const text = `Join our Twofold game night with room code ${night.room_code}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Twofold Game Night", text, url: location.origin });
+      } else {
+        await navigator.clipboard.writeText(`${text}\n${location.origin}`);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1800);
+      }
+    } catch {
+      // Closing the native share sheet is not an application error.
+    }
+  }
+  async function copyRoomCode() {
+    if (!night) return;
+    await navigator.clipboard.writeText(night.room_code);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  }
   async function loadPlayers(id: string) {
     const { data } = await supabase
       .from("twf_game_night_players")
@@ -750,9 +772,17 @@ export default function Home() {
       <main>
         <header>
           <strong>Twofold</strong>
-          <button className="signout" onClick={() => supabase.auth.signOut()}>
-            Sign out
-          </button>
+          <div className="topIdentity">
+            <span className="connectionDot" aria-hidden="true" />
+            <div>
+              <b>{profile.display_name}</b>
+              <small>{partner ? `Paired with ${partner.display_name}` : "Private space"}</small>
+            </div>
+            <Avatar person={profile} size="small" />
+            <button className="signout" onClick={() => supabase.auth.signOut()}>
+              Sign out
+            </button>
+          </div>
         </header>
         <nav className="mobileNav">
           {[
@@ -991,6 +1021,23 @@ export default function Home() {
                 <b>{selected.length}</b> selected
               </div>
             </div>
+            <div className="setupFilters" aria-label="Filter games by category">
+              {[
+                ["All", "All games"],
+                ["Couple", "♡ Couple"],
+                ["Competitive", "⚡ Competitive"],
+                ["Party", "✦ Party"],
+                ["Creative", "✎ Creative"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  className={category === value ? "active" : ""}
+                  onClick={() => setCategory(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <section className="lineupBuilder" aria-label="Selected game lineup">
               <div className="lineupBuilderHead">
                 <div>
@@ -1057,7 +1104,9 @@ export default function Home() {
               )}
             </section>
             <div className="games">
-              {GAMES.map((g) => (
+              {GAMES.filter(
+                (g) => category === "All" || g.category === category,
+              ).map((g) => (
                 <button
                   key={g.key}
                   className={selected.includes(g.key) ? "selected" : ""}
@@ -1108,12 +1157,13 @@ export default function Home() {
             <p>Both devices update automatically.</p>
             <div className="code">
               <b>{night.room_code}</b>
-              <button
-                onClick={() => navigator.clipboard.writeText(night.room_code)}
-              >
-                ▣ Copy
+              <button onClick={copyRoomCode}>
+                {copied ? "✓ Copied" : "▣ Copy"}
               </button>
             </div>
+            <button className="shareRoom" onClick={shareRoom}>
+              ↗ Share room invitation
+            </button>
             <div className="players">
               <div>
                 <Avatar person={profile} size="large" />
@@ -1135,6 +1185,24 @@ export default function Home() {
                 </small>
               </div>
             </div>
+            <section className="lobbyLineup">
+              <div>
+                <small>TONIGHT&apos;S LINEUP</small>
+                <b>{selected.length} {selected.length === 1 ? "game" : "games"}</b>
+              </div>
+              <ol>
+                {selected.map((key, index) => {
+                  const chosen = GAMES.find((item) => item.key === key);
+                  return (
+                    <li key={key}>
+                      <span>{index + 1}</span>
+                      <i>{chosen?.icon}</i>
+                      <b>{chosen?.title}</b>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
             {isHost ? (
               <div className="lobbyStart">
                 {!bothReady && (
