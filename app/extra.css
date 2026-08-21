@@ -2101,8 +2101,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .shell > main { margin-left: 216px; }
 .brand { padding: 5px 12px; font: 700 29px Georgia,serif; }
-.brand i { display: none; }
-.brand:after { content: "✦"; color: #ec6e9b; font: 18px Arial,sans-serif; }
+.brand i { width: 52px; height: 43px; display: block; flex: 0 0 auto; border-radius: 0; background: url('/twofold-mark.svg') center/contain no-repeat; color: transparent; }
+.brand:after { content: none; }
+.logoMark { width: 86px; height: 70px; border-radius: 0; background: url('/twofold-mark.svg') center/contain no-repeat; color: transparent; }
+.shell > main > header > strong { padding-left: 42px; position: relative; }
+.shell > main > header > strong:before { content: ""; position: absolute; left: 0; top: 50%; width: 38px; height: 32px; transform: translateY(-50%); background: url('/twofold-mark.svg') center/contain no-repeat; }
 .shell nav { margin-top: 38px; gap: 8px; }
 .shell nav button { min-height: 46px; padding: 11px 16px; color: #33273a; font-weight: 700; }
 .shell nav button.active { color: #fff; background: linear-gradient(110deg,#632478,#a531a0); box-shadow: 0 10px 24px rgba(107,39,119,.2); }

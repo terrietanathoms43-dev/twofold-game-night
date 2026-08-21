@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 128" role="img" aria-labelledby="title desc">
+  <title id="title">Twofold two-colour mark</title>
+  <desc id="desc">Two overlapping heart-shaped game controllers in coral and purple.</desc>
+  <defs>
+    <linearGradient id="coral" x1="18" y1="22" x2="92" y2="112" gradientUnits="userSpaceOnUse"><stop stop-color="#ff7790"/><stop offset="1" stop-color="#f44f72"/></linearGradient>
+    <linearGradient id="violet" x1="140" y1="25" x2="70" y2="115" gradientUnits="userSpaceOnUse"><stop stop-color="#9a60de"/><stop offset="1" stop-color="#6331ae"/></linearGradient>
+  </defs>
+  <circle cx="38" cy="17" r="7" fill="#ff718b"/><circle cx="122" cy="17" r="7" fill="#8850cc"/>
+  <path d="M80 5l4.2 9.8L94 19l-9.8 4.2L80 33l-4.2-9.8L66 19l9.8-4.2L80 5z" fill="#f85b85"/>
+  <path d="M73 48C62 28 32 29 20 47 7 67 18 89 35 104l22 18c4 3 9 2 12-2l26-35c9-13 5-31-7-40-5-4-10-6-15-6z" fill="url(#coral)"/>
+  <path d="M87 48c11-20 41-19 53-1 13 20 2 42-15 57l-22 18c-4 3-9 2-12-2L65 85c-9-13-5-31 7-40 5-4 10-6 15-6z" fill="url(#violet)" fill-opacity=".96"/>
+  <path d="M74 47c-13 9-17 25-9 38l15 20 15-20c8-13 4-29-8-38-5-4-9-6-13-6z" fill="#74349e" fill-opacity=".72"/>
+  <path d="M42 63h10V53h8v10h10v8H60v10h-8V71H42z" fill="#fff"/>
+  <circle cx="113" cy="58" r="5" fill="#fff"/><circle cx="102" cy="69" r="5" fill="#fff"/><circle cx="124" cy="69" r="5" fill="#fff"/><circle cx="113" cy="80" r="5" fill="#fff"/>
+</svg>
