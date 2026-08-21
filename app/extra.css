@@ -1487,6 +1487,29 @@ body {
   padding: 14px;
 }
 .callControls .hangup { background: #c8465f; color: #fff; }
+.callStage.minimized {
+  width: min(285px, calc(100vw - 28px));
+  min-height: 0;
+}
+.callStage.minimized > video,
+.callStage.minimized .callIdentity { display: none; }
+.callStage.minimized .callControls { padding: 9px; flex-wrap: wrap; }
+.commDock.inCall { right: auto; left: 22px; }
+.skipQuestion {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 9px !important;
+  margin: 18px 0 !important;
+  padding: 12px;
+  border: 1px solid #eadce6;
+  border-radius: 14px;
+  background: #fff8fb;
+}
+.skipQuestion p { width: 100%; margin: 0; color: var(--muted); font-size: 13px; }
+.skipButton { border: 0 !important; background: transparent !important; color: var(--plum) !important; padding: 5px !important; text-align: center !important; }
 .commNotice {
   position: fixed;
   right: 22px;
@@ -1503,6 +1526,7 @@ body {
   .commDock { bottom: 78px; right: 10px; }
   .chatPanel { bottom: 140px; right: 10px; }
   .callStage { bottom: 78px; right: 10px; }
+  .commDock.inCall { left: 10px; right: auto; }
 }
 
 /* 2026 polished visual system */

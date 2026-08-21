@@ -32,6 +32,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
   const [channelReady, setChannelReady] = useState(false);
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
+  const [callMinimized, setCallMinimized] = useState(false);
   const [callStatus, setCallStatus] = useState("");
   const channelRef = useRef<RealtimeChannel | null>(null);
   const endCallRef = useRef<(notify?: boolean) => void>(() => undefined);
@@ -124,10 +125,16 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
   }
 
   async function createPeer() {
+    const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
+    const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
+    const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
     const peer = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.cloudflare.com:3478" },
         { urls: "stun:stun.l.google.com:19302" },
+        ...(turnUrl && turnUsername && turnCredential
+          ? [{ urls: turnUrl, username: turnUsername, credential: turnCredential }]
+          : []),
       ],
     });
     peer.onicecandidate = ({ candidate }) => {
@@ -147,9 +154,10 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
         status === "connected"
           ? "Connected"
           : status === "failed"
-            ? "Call connection failed"
+            ? "Call connection interrupted — retrying…"
             : "Connecting…",
       );
+      if (status === "failed") peer.restartIce();
     };
     peerRef.current = peer;
     return peer;
@@ -272,7 +280,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
       )}
 
       {callMode && (
-        <div className={"callStage " + callMode}>
+        <div className={"callStage " + callMode + (callMinimized ? " minimized" : "")}>
           <video ref={remoteVideoRef} autoPlay playsInline aria-label={partnerName + " video"} />
           <video ref={localVideoRef} autoPlay muted playsInline aria-label="Your video" />
           <div className="callIdentity">
@@ -280,6 +288,10 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
             <span>{callStatus}</span>
           </div>
           <div className="callControls">
+            <button onClick={() => setCallMinimized((value) => !value)}>
+              {callMinimized ? "Expand" : "Minimize"}
+            </button>
+            <button onClick={() => setChatOpen((open) => !open)}>Chat</button>
             <button onClick={toggleMute}>{muted ? "Unmute" : "Mute"}</button>
             {callMode === "video" && (
               <button onClick={toggleCamera}>{cameraOff ? "Camera on" : "Camera off"}</button>
@@ -312,17 +324,21 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
         </aside>
       )}
 
-      {!callMode && (
-        <div className="commDock" aria-label="Room communication controls">
-          <button onClick={() => setChatOpen((open) => !open)}>Chat</button>
+      <div className={"commDock" + (callMode ? " inCall" : "")} aria-label="Room communication controls">
+        <button onClick={() => setChatOpen((open) => !open)}>
+          Chat{messages.length ? ` (${messages.length})` : ""}
+        </button>
+        {!callMode && (
+          <>
           <button disabled={!channelReady} onClick={() => startCall("audio")}>
             Voice
           </button>
           <button disabled={!channelReady} onClick={() => startCall("video")}>
             Video
           </button>
-        </div>
-      )}
+          </>
+        )}
+      </div>
       {callStatus && !callMode && <div className="commNotice">{callStatus}</div>}
     </div>
   );

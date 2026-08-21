@@ -36,6 +36,7 @@ type Round = {
   prompt: { text?: string };
   status: string;
   ends_at: string | null;
+  state?: Record<string, string>;
 };
 type View =
   | "home"
@@ -555,13 +556,35 @@ export default function Home() {
       .eq("game_night_id", id);
     setPlayers(data || []);
   }
-  function getPrompt(gameKey: string, index: number) {
+  function getPromptPool(gameKey: string) {
     const definition = GAMES.find((g) => g.key === gameKey) || GAMES[0],
       personal = customQuestions
         .filter((q) => q.game_key === gameKey)
         .map((q) => q.question),
       pool = [...personal, ...definition.prompts];
+    return [...new Set(pool)];
+  }
+  function getPrompt(gameKey: string, index: number) {
+    const pool = getPromptPool(gameKey);
     return pool[index % pool.length];
+  }
+  async function pickFreshPrompt(gameKey: string, roundIndex = 0) {
+    if (!night) return getPrompt(gameKey, 0);
+    const definition = GAMES.find((item) => item.key === gameKey);
+    const fullPool = definition?.mode === "speed" ? definition.prompts : getPromptPool(gameKey);
+    const candidatePool = definition?.mode === "speed"
+      ? fullPool.filter((_, index) => index % 3 === roundIndex % 3)
+      : fullPool;
+    const { data, error } = await supabase.rpc("twf_pick_fresh_prompt", {
+      p_game_night_id: night.id,
+      p_game_key: gameKey,
+      p_candidates: candidatePool,
+    });
+    if (error) {
+      setMsg(error.message);
+      return null;
+    }
+    return data as string;
   }
   async function loadGameState(id: string) {
     const { data: n } = await supabase
@@ -614,9 +637,14 @@ export default function Home() {
   }
   async function start() {
     setBusy(true);
+    const freshPrompt = await pickFreshPrompt(game.key, 0);
+    if (!freshPrompt) {
+      setBusy(false);
+      return;
+    }
     const { error } = await supabase.rpc("twf_start_game_night", {
       p_game_night_id: night!.id,
-      p_prompt: getPrompt(game.key, 0),
+      p_prompt: freshPrompt,
       p_timed: game.mode === "speed",
     });
     if (error) setMsg(error.message);
@@ -643,9 +671,13 @@ export default function Home() {
   async function advance() {
     const nextGi = round < 2 ? gi : gi + 1,
       nextRound = round < 2 ? round + 1 : 0,
-      nextGame = GAMES.find((g) => g.key === selected[nextGi]),
-      nextPrompt = nextGame ? getPrompt(nextGame.key, nextRound) : "";
+      nextGame = GAMES.find((g) => g.key === selected[nextGi]);
     setBusy(true);
+    const nextPrompt = nextGame ? await pickFreshPrompt(nextGame.key, nextRound) : "";
+    if (nextGame && !nextPrompt) {
+      setBusy(false);
+      return;
+    }
     const { error } = await supabase.rpc("twf_advance_game", {
       p_game_night_id: night!.id,
       p_next_prompt: nextPrompt,
@@ -653,6 +685,31 @@ export default function Home() {
     });
     if (error) setMsg(error.message);
     else await loadGameState(night!.id);
+    setBusy(false);
+  }
+  async function requestSkip() {
+    if (!activeRound || !night) return;
+    setBusy(true);
+    const replacement = await pickFreshPrompt(game.key, round);
+    if (replacement) {
+      const { error } = await supabase.rpc("twf_request_question_skip", {
+        p_round_id: activeRound.id,
+        p_replacement_prompt: replacement,
+      });
+      if (error) setMsg(error.message);
+      else await loadGameState(night.id);
+    }
+    setBusy(false);
+  }
+  async function respondSkip(approve: boolean) {
+    if (!activeRound || !night) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("twf_respond_question_skip", {
+      p_round_id: activeRound.id,
+      p_approve: approve,
+    });
+    if (error) setMsg(error.message);
+    else await loadGameState(night.id);
     setBusy(false);
   }
   async function rateCreative(rating: number) {
@@ -696,6 +753,9 @@ export default function Home() {
     roundRevealed = activeRound?.status === "revealed",
     iAnswered = answers.some((a) => a.user_id === profile.id),
     partnerAnswered = answers.some((a) => a.user_id === partner?.id),
+    skipStatus = activeRound?.state?.skip_status,
+    skipRequester = activeRound?.state?.skip_requested_by,
+    iRequestedSkip = skipRequester === profile.id,
     personalTarget =
       game.key === "knows"
         ? round % 2 === 0
@@ -1287,6 +1347,29 @@ export default function Home() {
               </small>
               <h1>{displayPrompt}</h1>
               <p>{answerGuidance}</p>
+              {!roundRevealed && !iAnswered && !partnerAnswered && (
+                <div className="skipQuestion">
+                  {skipStatus === "requested" ? (
+                    iRequestedSkip ? (
+                      <p>Skip requested — waiting for your partner to approve.</p>
+                    ) : (
+                      <>
+                        <p>Your partner would like a different question.</p>
+                        <button className="secondary" disabled={busy} onClick={() => respondSkip(false)}>
+                          Keep this one
+                        </button>
+                        <button className="primary" disabled={busy} onClick={() => respondSkip(true)}>
+                          Approve skip
+                        </button>
+                      </>
+                    )
+                  ) : (
+                    <button className="skipButton" disabled={busy} onClick={requestSkip}>
+                      ↷ Ask to skip question
+                    </button>
+                  )}
+                </div>
+              )}
               {game.key === "knows" && (
                 <div className="secretRole">
                   <span>
