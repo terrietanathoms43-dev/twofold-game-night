@@ -22,6 +22,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   const [emojis, setEmojis] = useState(false);
   const [seen, setSeen] = useState(0);
   const [notice, setNotice] = useState("");
+  const [alertsEnabled, setAlertsEnabled] = useState<boolean | null>(null);
   const [sending, setSending] = useState(false);
   const [calls, setCalls] = useState<CallEvent[]>([]);
   const [clock, setClock] = useState(() => Date.now());
@@ -67,6 +68,34 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       window.dispatchEvent(new CustomEvent("twofold:chat-open-state", { detail: { open: false } }));
     };
   }, [open]);
+
+  useEffect(() => {
+    let active = true;
+    async function checkAlerts() {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window) || Notification.permission !== "granted") {
+        if (active) setAlertsEnabled(false);
+        return;
+      }
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+          if (active) setAlertsEnabled(false);
+          return;
+        }
+        const { data, error } = await supabase.from("twf_push_subscriptions")
+          .select("endpoint")
+          .eq("user_id", userId)
+          .eq("endpoint", subscription.endpoint)
+          .maybeSingle();
+        if (active) setAlertsEnabled(!error && Boolean(data));
+      } catch {
+        if (active) setAlertsEnabled(false);
+      }
+    }
+    void checkAlerts();
+    return () => { active = false; };
+  }, [userId]);
 
   async function send(event: FormEvent) {
     event.preventDefault();
@@ -121,8 +150,10 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       const json = subscription.toJSON();
       const { error } = await supabase.from("twf_push_subscriptions").upsert({ user_id: userId, endpoint: subscription.endpoint, subscription: json, updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
       if (error) throw error;
+      setAlertsEnabled(true);
       setNotice("Call alerts are enabled on this device.");
     } catch {
+      setAlertsEnabled(false);
       setNotice("Call alerts could not be enabled. Try reinstalling Twofold.");
     }
   }
@@ -148,7 +179,11 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
         {emojis && <div className="coupleEmojiTray">{EMOJIS.map((emoji) => <button key={emoji} onClick={() => setDraft((value) => value + emoji)}>{emoji}</button>)}</div>}
         <div className="coupleCallActions"><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "audio" } }))}>☎ Voice call</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "video" } }))}>🎥 Video call</button></div>
         <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input value={draft} maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim() || sending}>{sending ? "Sending…" : "Send"}</button></form>
-        <button className="enableAlerts" onClick={enableAlerts}>🔔 Enable message & call alerts</button>
+        {alertsEnabled === null
+          ? <div className="alertsStatus">Checking notification status…</div>
+          : alertsEnabled
+            ? <div className="alertsStatus enabled">✓ Message &amp; call alerts enabled</div>
+            : <button className="enableAlerts" onClick={enableAlerts}>🔔 Enable message &amp; call alerts</button>}
       </div>
     </aside>}
   </div>;

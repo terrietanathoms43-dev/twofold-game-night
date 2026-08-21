@@ -2250,7 +2250,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .coupleChatComposer form button:last-child { background: #ec6487; color: #fff; }
 .coupleEmojiTray { display: grid; grid-template-columns: repeat(6,1fr); gap: 5px; padding: 9px 10px 0; }
 .coupleEmojiTray button { min-height: 35px; border: 0; border-radius: 9px; background: #fff3f7; }
-.enableAlerts,.alertNotice { width: 100%; border: 0; border-top: 1px solid #f0e4eb; padding: 9px 12px; background: #fff8fb; color: #6a3475; font-size: 13px; font-weight: 800; }
+.enableAlerts,.alertNotice,.alertsStatus { width: 100%; border: 0; border-top: 1px solid #f0e4eb; padding: 9px 12px; background: #fff8fb; color: #6a3475; font-size: 13px; font-weight: 800; text-align: center; }
 .alertNotice { color: #2f7652; }
+.alertsStatus.enabled { color: #2f7652; }
 @media(max-width:900px){.coupleChatPanel{inset:76px 8px 72px;width:auto;height:auto;max-height:none;border-radius:18px}}
 @media(max-width:560px){.coupleChatPanel{inset:8px 6px 72px;border-radius:15px}.coupleChatMessages>div:not(:last-child){max-width:92%}.coupleChatMessages>.coupleCallEvent{max-width:100%}}
