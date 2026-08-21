@@ -1605,6 +1605,29 @@ body {
 .callStage.video.minimized .callControls button:not(:first-child):not(.hangup) { display: none; }
 .callStage.video.minimized .callControls button { padding: 7px 9px; font-size: 13px; }
 .callStage.minimized .callControls { padding: 9px; flex-wrap: wrap; }
+.callDragHandle {
+  position: absolute;
+  z-index: 4;
+  top: 7px;
+  left: 7px;
+  min-width: 54px;
+  min-height: 30px;
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 999px;
+  background: rgba(35,18,40,.72);
+  color: #fff;
+  cursor: grab;
+  touch-action: none;
+  font-size: 13px;
+  font-weight: 850;
+}
+.callDragHandle:active { cursor: grabbing; }
+.roomComms.global-chat-open .callStage.minimized {
+  right: auto;
+  left: 22px;
+  z-index: 55;
+}
+.roomComms.global-chat-open .coupleChatPanel { z-index: 70; }
 .commDock.inCall { right: auto; left: 22px; }
 .skipQuestion {
   display: flex !important;
@@ -1646,6 +1669,7 @@ body {
   }
   .callStage { bottom: 78px; right: 10px; }
   .commDock.inCall { left: 10px; right: auto; }
+  .roomComms.global-chat-open .callStage.minimized { left: 10px; right: auto; }
 }
 @media (max-width: 560px) {
   .chatPanel { inset: 8px 6px 72px; border-radius: 15px; }

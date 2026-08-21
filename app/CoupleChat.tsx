@@ -21,6 +21,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   const [emojis, setEmojis] = useState(false);
   const [seen, setSeen] = useState(0);
   const [notice, setNotice] = useState("");
+  const [sending, setSending] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -44,13 +45,30 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
     return () => window.clearTimeout(timer);
   }, [messages, open]);
 
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("twofold:chat-open-state", { detail: { open } }));
+    return () => {
+      window.dispatchEvent(new CustomEvent("twofold:chat-open-state", { detail: { open: false } }));
+    };
+  }, [open]);
+
   async function send(event: FormEvent) {
     event.preventDefault();
     const body = draft.trim();
-    if (!body) return;
+    if (!body || sending) return;
     setDraft("");
-    const { error } = await supabase.from("twf_couple_messages").insert({ couple_id: coupleId, sender_id: userId, body });
-    if (error) setNotice("Message could not be sent.");
+    setSending(true);
+    const { data, error } = await supabase.from("twf_couple_messages")
+      .insert({ couple_id: coupleId, sender_id: userId, body })
+      .select("id,sender_id,body,created_at")
+      .single();
+    if (error) {
+      setDraft(body);
+      setNotice("Message could not be sent.");
+    } else if (data) {
+      setMessages((current) => current.some((item) => item.id === data.id) ? current : [...current, data as Message]);
+    }
+    setSending(false);
   }
 
   async function enableAlerts() {
@@ -84,7 +102,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       <div className="coupleChatComposer">
         {notice && <button className="alertNotice" onClick={() => setNotice("")}>{notice} ×</button>}
         {emojis && <div className="coupleEmojiTray">{EMOJIS.map((emoji) => <button key={emoji} onClick={() => setDraft((value) => value + emoji)}>{emoji}</button>)}</div>}
-        <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input value={draft} maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim()}>Send</button></form>
+        <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input value={draft} maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim() || sending}>{sending ? "Sending…" : "Send"}</button></form>
         <button className="enableAlerts" onClick={enableAlerts}>🔔 Enable call alerts on this device</button>
       </div>
     </aside>}

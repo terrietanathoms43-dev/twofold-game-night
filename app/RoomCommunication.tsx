@@ -56,6 +56,9 @@ export default function RoomCommunication({ nightId, userId, partnerId, partnerN
   const [replying, setReplying] = useState<Message | null>(null);
   const [lastSeenCount, setLastSeenCount] = useState(0);
   const [quality, setQuality] = useState("Checking connection");
+  const [globalChatOpen, setGlobalChatOpen] = useState(false);
+  const [speakerActive, setSpeakerActive] = useState(false);
+  const [callPosition, setCallPosition] = useState<{ x: number; y: number } | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const endCallRef = useRef<(notify?: boolean) => void>(() => undefined);
   const peerRef = useRef<RTCPeerConnection | null>(null);
@@ -64,6 +67,17 @@ export default function RoomCommunication({ nightId, userId, partnerId, partnerN
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
+
+  useEffect(() => {
+    const update = (event: Event) => {
+      const isOpen = Boolean((event as CustomEvent<{ open?: boolean }>).detail?.open);
+      setGlobalChatOpen(isOpen);
+      if (isOpen && callMode) setCallMinimized(true);
+    };
+    window.addEventListener("twofold:chat-open-state", update);
+    return () => window.removeEventListener("twofold:chat-open-state", update);
+  }, [callMode]);
 
   useEffect(() => {
     let active = true;
@@ -213,7 +227,13 @@ export default function RoomCommunication({ nightId, userId, partnerId, partnerN
         });
     };
     peer.ontrack = ({ streams }) => {
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = streams[0];
+      const remote = remoteVideoRef.current;
+      if (remote) {
+        remote.srcObject = streams[0];
+        remote.muted = false;
+        remote.volume = 1;
+        void remote.play().catch(() => setCallStatus("Tap Speaker to hear your partner."));
+      }
     };
     peer.onconnectionstatechange = () => {
       const status = peer.connectionState;
@@ -232,7 +252,7 @@ export default function RoomCommunication({ nightId, userId, partnerId, partnerN
 
   async function getMedia(mode: "audio" | "video") {
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       video: mode === "video" ? { facingMode: "user" } : false,
     });
     localStreamRef.current = stream;
@@ -331,6 +351,8 @@ export default function RoomCommunication({ nightId, userId, partnerId, partnerN
     setMuted(false);
     setCameraOff(false);
     setCallStatus("");
+    setSpeakerActive(false);
+    setCallPosition(null);
   }
   endCallRef.current = endCall;
 
@@ -348,6 +370,43 @@ export default function RoomCommunication({ nightId, userId, partnerId, partnerN
       track.enabled = !next;
     });
     setCameraOff(next);
+  }
+
+  async function routeToSpeaker() {
+    const remote = remoteVideoRef.current;
+    if (!remote) return;
+    try {
+      const devices = navigator.mediaDevices as MediaDevices & {
+        selectAudioOutput?: () => Promise<MediaDeviceInfo>;
+      };
+      const output = devices.selectAudioOutput ? await devices.selectAudioOutput() : null;
+      const sink = remote as HTMLVideoElement & { setSinkId?: (deviceId: string) => Promise<void> };
+      if (sink.setSinkId) await sink.setSinkId(output?.deviceId || "default");
+      remote.muted = false;
+      remote.volume = 1;
+      await remote.play();
+      setSpeakerActive(true);
+      setCallStatus("Connected · speaker on");
+    } catch {
+      setCallStatus("Turn up media volume or choose Speaker in your phone audio controls.");
+    }
+  }
+
+  function beginDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!callMinimized) return;
+    const stage = event.currentTarget.closest(".callStage")?.getBoundingClientRect();
+    if (!stage) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { offsetX: event.clientX - stage.left, offsetY: event.clientY - stage.top };
+  }
+
+  function dragCall(event: React.PointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    if (!drag || !callMinimized) return;
+    const width = event.currentTarget.closest(".callStage")?.getBoundingClientRect().width || 180;
+    const x = Math.max(8, Math.min(window.innerWidth - width - 8, event.clientX - drag.offsetX));
+    const y = Math.max(8, Math.min(window.innerHeight - 88, event.clientY - drag.offsetY));
+    setCallPosition({ x, y });
   }
 
   async function sendMessage(event: FormEvent) {
@@ -384,7 +443,7 @@ export default function RoomCommunication({ nightId, userId, partnerId, partnerN
   }
 
   return (
-    <div className={"roomComms" + (chatOpen ? " chat-open" : "")}>
+    <div className={"roomComms" + (chatOpen ? " chat-open" : "") + (globalChatOpen ? " global-chat-open" : "")}>
       {incoming && !callMode && (
         <div className="incomingCall" role="dialog" aria-label="Incoming call">
           <b>{incoming.mode === "video" ? "Video" : "Voice"} call</b>
@@ -395,7 +454,11 @@ export default function RoomCommunication({ nightId, userId, partnerId, partnerN
       )}
 
       {callMode && (
-        <div className={"callStage " + callMode + (callMinimized ? " minimized" : "")}>
+        <div
+          className={"callStage " + callMode + (callMinimized ? " minimized" : "")}
+          style={callMinimized && callPosition ? { left: callPosition.x, top: callPosition.y, right: "auto", bottom: "auto" } : undefined}
+        >
+          {callMinimized && <button className="callDragHandle" onPointerDown={beginDrag} onPointerMove={dragCall} onPointerUp={() => { dragRef.current = null; }} aria-label="Move minimized call">Move</button>}
           <video ref={remoteVideoRef} autoPlay playsInline aria-label={partnerName + " video"} />
           <video ref={localVideoRef} autoPlay muted playsInline aria-label="Your video" />
           <div className="callIdentity">
@@ -408,6 +471,7 @@ export default function RoomCommunication({ nightId, userId, partnerId, partnerN
             </button>
             {chatEnabled && <button onClick={toggleChat}>Chat</button>}
             <button onClick={toggleMute}>{muted ? "Unmute" : "Mute"}</button>
+            <button onClick={routeToSpeaker}>{speakerActive ? "Speaker on" : "Speaker"}</button>
             {callMode === "video" && (
               <button onClick={toggleCamera}>{cameraOff ? "Camera on" : "Camera off"}</button>
             )}

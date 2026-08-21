@@ -241,6 +241,20 @@ export default function Home() {
     };
   }, [night?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- one subscription per active room
   useEffect(() => {
+    if (!night || view !== "lobby") return;
+    const reconcileLobby = () => void loadPlayers(night.id);
+    reconcileLobby();
+    const timer = window.setInterval(reconcileLobby, 2500);
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") reconcileLobby();
+    };
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [night?.id, view]); // eslint-disable-line react-hooks/exhaustive-deps -- lobby-only recovery when a realtime event is missed
+  useEffect(() => {
     if (!couple || !profile) return;
     const refreshQuestions = async () => {
       const { data } = await supabase
@@ -599,9 +613,13 @@ export default function Home() {
       setMsg("Room not found.");
       return;
     }
-    await supabase
-      .from("twf_game_night_players")
-      .upsert({ game_night_id: n.id, user_id: profile!.id, ready: true });
+    const { error: joinError } = await supabase.rpc("twf_join_game_night", {
+      p_game_night_id: n.id,
+    });
+    if (joinError) {
+      setMsg(joinError.message);
+      return;
+    }
     setNight(n);
     await loadGameState(n.id);
     setView("lobby");
