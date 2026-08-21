@@ -25,6 +25,7 @@ type CallOffer = {
   sender: string;
   mode: "audio" | "video";
   description: RTCSessionDescriptionInit;
+  expiresAt?: string;
 };
 
 const CHAT_EMOJIS = ["♡", "😂", "🥰", "😊", "😭", "🎉", "🔥", "👏", "✨", "🎮", "🏆", "💭"];
@@ -99,10 +100,10 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
       .order("created_at")
       .limit(200)
       .then(({ data }) => setMessages((data as Message[]) || []));
-    supabase.from("twf_call_invites").select("id,caller_id,mode,description")
+    supabase.from("twf_call_invites").select("id,caller_id,mode,description,expires_at")
       .eq("couple_id", coupleId).eq("recipient_id", userId).eq("status", "pending")
       .gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle()
-      .then(({ data }) => { if (active && data) { activeInviteRef.current = data.id; setIncoming({ inviteId: data.id, sender: data.caller_id, mode: data.mode, description: data.description } as CallOffer); } });
+      .then(({ data }) => { if (active && data) { activeInviteRef.current = data.id; setIncoming({ inviteId: data.id, sender: data.caller_id, mode: data.mode, description: data.description, expiresAt: data.expires_at } as CallOffer); } });
 
     void supabase.realtime.setAuth();
     const channel = supabase
@@ -133,7 +134,7 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "twf_call_invites", filter: "couple_id=eq." + coupleId }, ({ new: row }) => {
         if (row.recipient_id === userId && row.status === "pending") {
           activeInviteRef.current = row.id;
-          setIncoming({ inviteId: row.id, sender: row.caller_id, mode: row.mode, description: row.description } as CallOffer);
+          setIncoming({ inviteId: row.id, sender: row.caller_id, mode: row.mode, description: row.description, expiresAt: row.expires_at } as CallOffer);
           void showIncomingNotification(row.mode as "audio" | "video");
         }
       })
@@ -186,6 +187,16 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
       return () => window.clearTimeout(markRead);
     }
   }, [messages, chatOpen]);
+
+  useEffect(() => {
+    if (!incoming?.expiresAt || callMode) return;
+    const remaining = new Date(incoming.expiresAt).getTime() - Date.now();
+    const timer = window.setTimeout(() => {
+      activeInviteRef.current = null;
+      setIncoming(null);
+    }, Math.max(0, remaining));
+    return () => window.clearTimeout(timer);
+  }, [incoming?.expiresAt, callMode]);
 
   useEffect(() => {
     if (!callMode) return;
@@ -303,13 +314,13 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
       const completeDescription = peer.localDescription?.toJSON() || description;
       const { data: invite, error: inviteError } = await supabase.from("twf_call_invites").insert({
         game_night_id: nightId || null, couple_id: coupleId, caller_id: userId, recipient_id: partnerId, mode, description: completeDescription,
-      }).select("id").single();
+      }).select("id,expires_at").single();
       if (inviteError) throw inviteError;
       activeInviteRef.current = invite.id;
       await channelRef.current?.send({
         type: "broadcast",
         event: "call-offer",
-        payload: { inviteId: invite.id, sender: userId, mode, description: completeDescription },
+        payload: { inviteId: invite.id, sender: userId, mode, description: completeDescription, expiresAt: invite.expires_at },
       });
       void supabase.functions.invoke("notify-call", { body: { coupleId, mode } });
     } catch {
