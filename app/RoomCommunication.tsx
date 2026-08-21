@@ -318,6 +318,14 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
     if (error) setCallStatus("Sticker could not be sent.");
   }
 
+  function toggleChat() {
+    setChatOpen((open) => {
+      const next = !open;
+      if (next && callMode) setCallMinimized(true);
+      return next;
+    });
+  }
+
   return (
     <div className="roomComms">
       {incoming && !callMode && (
@@ -341,7 +349,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
             <button onClick={() => setCallMinimized((value) => !value)}>
               {callMinimized ? "Expand" : "Minimize"}
             </button>
-            <button onClick={() => setChatOpen((open) => !open)}>Chat</button>
+            <button onClick={toggleChat}>Chat</button>
             <button onClick={toggleMute}>{muted ? "Unmute" : "Mute"}</button>
             {callMode === "video" && (
               <button onClick={toggleCamera}>{cameraOff ? "Camera on" : "Camera off"}</button>
@@ -397,7 +405,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
       )}
 
       <div className={"commDock" + (callMode ? " inCall" : "")} aria-label="Room communication controls">
-        <button onClick={() => setChatOpen((open) => !open)}>
+        <button onClick={toggleChat}>
           Chat{Math.max(0, messages.length - lastSeenCount) > 0 ? ` (${Math.max(0, messages.length - lastSeenCount)})` : ""}
         </button>
         {!callMode && (

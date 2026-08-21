@@ -1335,6 +1335,7 @@ body {
   border-radius: 20px;
   background: #fff;
   box-shadow: 0 24px 70px rgba(54, 25, 61, 0.24);
+  overflow-x: hidden;
 }
 .chatPanel > header {
   height: auto;
@@ -1614,9 +1615,28 @@ body {
 }
 @media (max-width: 900px) {
   .commDock { bottom: 78px; right: 10px; }
-  .chatPanel { bottom: 140px; right: 10px; }
+  .chatPanel {
+    z-index: 70;
+    inset: 76px 8px 72px;
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
+    border-radius: 18px;
+  }
   .callStage { bottom: 78px; right: 10px; }
   .commDock.inCall { left: 10px; right: auto; }
+}
+@media (max-width: 560px) {
+  .chatPanel { inset: 8px 6px 72px; border-radius: 15px; }
+  .chatMessages { min-width: 0; overflow-x: hidden; overscroll-behavior: contain; }
+  .chatMessages > div:not(:last-child) { max-width: 92%; overflow-wrap: anywhere; word-break: break-word; }
+  .chatComposer > form { display: grid; grid-template-columns: auto auto minmax(0,1fr) auto; gap: 5px; padding: 8px; }
+  .chatComposer > form input { width: 100%; min-width: 0; }
+  .chatComposer > form button { padding: 9px 10px; }
+  .stickerTray { grid-template-columns: repeat(2,minmax(0,1fr)); max-height: 190px; overflow-y: auto; }
+  .emojiTray { grid-template-columns: repeat(6,minmax(0,1fr)); }
+  .callStage.minimized { z-index: 55; max-width: calc(100vw - 20px); }
 }
 
 /* 2026 polished visual system */
