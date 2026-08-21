@@ -85,7 +85,12 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
   useEffect(() => {
     const begin = (event: Event) => {
       const mode = (event as CustomEvent<{ mode?: "audio" | "video" }>).detail?.mode;
-      if (mode && !callMode && channelReady) void startCall(mode);
+      if (!mode || callMode) return;
+      if (!channelReady) {
+        setCallStatus("Call service is reconnecting. Please try again in a moment.");
+        return;
+      }
+      void startCall(mode);
     };
     window.addEventListener("twofold:start-call", begin);
     return () => window.removeEventListener("twofold:start-call", begin);
@@ -323,9 +328,14 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
         payload: { inviteId: invite.id, sender: userId, mode, description: completeDescription, expiresAt: invite.expires_at },
       });
       void supabase.functions.invoke("notify-call", { body: { coupleId, mode } });
-    } catch {
+    } catch (error) {
       endCall(false);
-      setCallStatus("Camera or microphone permission was not granted.");
+      if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")) {
+        setCallStatus("Camera or microphone permission was not granted.");
+      } else {
+        console.error("[twofold-call] Could not start call", error);
+        setCallStatus("The call could not start. Please check your connection and try again.");
+      }
     }
   }
 
