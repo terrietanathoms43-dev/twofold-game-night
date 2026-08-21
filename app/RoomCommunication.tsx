@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 
 type Message = {
@@ -16,16 +17,24 @@ type Props = {
   partnerName: string;
 };
 
+type CallOffer = {
+  sender: string;
+  mode: "audio" | "video";
+  description: RTCSessionDescriptionInit;
+};
+
 export default function RoomCommunication({ nightId, userId, partnerName }: Props) {
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [callMode, setCallMode] = useState<"audio" | "video" | null>(null);
-  const [incoming, setIncoming] = useState<any>(null);
+  const [incoming, setIncoming] = useState<CallOffer | null>(null);
+  const [channelReady, setChannelReady] = useState(false);
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [callStatus, setCallStatus] = useState("");
-  const channelRef = useRef<any>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const endCallRef = useRef<(notify?: boolean) => void>(() => undefined);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -34,6 +43,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    let active = true;
     supabase
       .from("twf_room_messages")
       .select("id,sender_id,body,created_at")
@@ -42,8 +52,11 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
       .limit(200)
       .then(({ data }) => setMessages((data as Message[]) || []));
 
+    void supabase.realtime.setAuth();
     const channel = supabase
-      .channel("twf-room-comms-" + nightId)
+      .channel(`twf-room:${nightId}:call`, {
+        config: { private: true, broadcast: { ack: true } },
+      })
       .on(
         "postgres_changes",
         {
@@ -60,7 +73,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
           ),
       )
       .on("broadcast", { event: "call-offer" }, ({ payload }) => {
-        if (payload.sender !== userId) setIncoming(payload);
+        if (payload.sender !== userId) setIncoming(payload as CallOffer);
       })
       .on("broadcast", { event: "call-answer" }, async ({ payload }) => {
         if (payload.sender === userId || !peerRef.current) return;
@@ -83,12 +96,18 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
         }
       })
       .on("broadcast", { event: "call-end" }, ({ payload }) => {
-        if (payload.sender !== userId) endCall(false);
+        if (payload.sender !== userId) endCallRef.current(false);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (!active) return;
+        setChannelReady(status === "SUBSCRIBED");
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT")
+          setCallStatus("Private call service is reconnecting…");
+      });
     channelRef.current = channel;
 
     return () => {
+      active = false;
       stopMedia();
       peerRef.current?.close();
       supabase.removeChannel(channel);
@@ -210,6 +229,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
     setCameraOff(false);
     setCallStatus("");
   }
+  endCallRef.current = endCall;
 
   function toggleMute() {
     const next = !muted;
@@ -295,8 +315,12 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
       {!callMode && (
         <div className="commDock" aria-label="Room communication controls">
           <button onClick={() => setChatOpen((open) => !open)}>Chat</button>
-          <button onClick={() => startCall("audio")}>Voice</button>
-          <button onClick={() => startCall("video")}>Video</button>
+          <button disabled={!channelReady} onClick={() => startCall("audio")}>
+            Voice
+          </button>
+          <button disabled={!channelReady} onClick={() => startCall("video")}>
+            Video
+          </button>
         </div>
       )}
       {callStatus && !callMode && <div className="commNotice">{callStatus}</div>}

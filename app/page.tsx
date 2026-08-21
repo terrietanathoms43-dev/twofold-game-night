@@ -2,6 +2,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
+import Image from "next/image";
 import { supabase } from "../lib/supabase";
 import { GAMES } from "../lib/games";
 import RoomCommunication from "./RoomCommunication";
@@ -92,11 +93,15 @@ function Avatar({
   const option =
     AVATARS.find((a) => a.key === person?.avatar_key) || AVATARS[0];
   if (person?.avatar_url) {
+    const pixels = size === "large" ? 76 : size === "small" ? 40 : 52;
     return (
-      <img
+      <Image
         className={"avatarPic " + size}
         src={person.avatar_url}
         alt={person.display_name + " profile"}
+        width={pixels}
+        height={pixels}
+        unoptimized
       />
     );
   }
@@ -148,7 +153,7 @@ export default function Home() {
   }, []);
   useEffect(() => {
     if (session?.user) loadAccount(session.user.id);
-  }, [session?.user?.id]);
+  }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed only to the authenticated user
   useEffect(() => {
     const sync = () => setOnline(navigator.onLine);
     sync();
@@ -203,7 +208,7 @@ export default function Home() {
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [night?.id]);
+  }, [night?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- one subscription per active room
   useEffect(() => {
     const tick = () => {
       const endsAt = activeRound?.ends_at;
@@ -420,36 +425,20 @@ export default function Home() {
       setMsg("Choose at least one game first.");
       return;
     }
+    if (resumableNight) {
+      setMsg("Resume or cancel your active room before creating another.");
+      setView("home");
+      return;
+    }
     setBusy(true);
-    if (resumableNight)
-      await supabase.rpc("twf_cancel_game_night", {
-        p_game_night_id: resumableNight.id,
-      });
-    const { data: n, error } = await supabase
-      .from("twf_game_nights")
-      .insert({ couple_id: couple.id, created_by: profile!.id })
-      .select()
-      .single();
+    const { data: n, error } = await supabase.rpc("twf_create_game_night", {
+      p_game_keys: selected,
+    });
     if (error) {
       setMsg(error.message);
       setBusy(false);
       return;
     }
-    await supabase
-      .from("twf_game_night_players")
-      .insert([
-        { game_night_id: n.id, user_id: profile!.id, ready: true },
-        ...(partner
-          ? [{ game_night_id: n.id, user_id: partner.id, ready: false }]
-          : []),
-      ]);
-    await supabase.from("twf_selected_games").insert(
-      selected.map((game_key, position) => ({
-        game_night_id: n.id,
-        game_key,
-        position,
-      })),
-    );
     setNight(n);
     setResumableNight(n);
     await loadPlayers(n.id);
@@ -853,10 +842,13 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              <img
+              <Image
                 className="heroArt"
                 src="/couple-hero.svg"
                 alt="Two heart-shaped game controllers"
+                width={460}
+                height={340}
+                priority
               />
             </section>
             <div className="title">
@@ -904,9 +896,11 @@ export default function Home() {
                   night.
                 </p>
               </div>
-              <img
+              <Image
                 src="/couple-hero.svg"
                 alt="Romantic game-night illustration"
+                width={430}
+                height={320}
               />
             </section>
             <div className="categoryPills">
