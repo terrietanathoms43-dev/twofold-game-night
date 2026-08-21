@@ -211,6 +211,38 @@ export default function Home() {
     };
   }, [night?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- one subscription per active room
   useEffect(() => {
+    if (!couple || !profile) return;
+    const refreshQuestions = async () => {
+      const { data } = await supabase
+        .from("twf_custom_questions")
+        .select("id,created_by,game_key,question,created_at")
+        .eq("couple_id", couple.id)
+        .order("created_at", { ascending: false });
+      setCustomQuestions(data || []);
+    };
+    const channel = supabase
+      .channel("twf-couple-live-" + couple.id)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "twf_custom_questions", filter: "couple_id=eq." + couple.id },
+        refreshQuestions,
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "twf_profiles" },
+        async ({ new: updated }) => {
+          if (updated.id === profile.id)
+            setProfile(await signedProfile(updated as Profile));
+          if (updated.id === partner?.id)
+            setPartner(await signedProfile(updated as Profile));
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [couple?.id, profile?.id, partner?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- resubscribe only when couple membership changes
+  useEffect(() => {
     const tick = () => {
       const endsAt = activeRound?.ends_at;
       setTimeLeft(
@@ -1593,6 +1625,23 @@ export default function Home() {
                 Upload a photo or pick an illustrated avatar. You can change it
                 whenever you like.
               </p>
+              <div className="currentAvatarChoice">
+                <Avatar person={profile} size="large" />
+                <div>
+                  <small>CURRENT PROFILE PICTURE</small>
+                  <b>
+                    {profile.avatar_url
+                      ? "Your uploaded photo"
+                      : AVATARS.find((item) => item.key === profile.avatar_key)
+                          ?.label || "Illustrated avatar"}
+                  </b>
+                  <span>
+                    {profile.avatar_url
+                      ? "Active on your profile"
+                      : "Choose a photo below to replace it"}
+                  </span>
+                </div>
+              </div>
               <label className="photoUpload">
                 <span>＋ Upload profile photo</span>
                 <small>JPG, PNG, or WebP · maximum 2 MB</small>
@@ -1607,7 +1656,11 @@ export default function Home() {
                 {AVATARS.map((a) => (
                   <button
                     key={a.key}
-                    className={profile.avatar_key === a.key ? "selected" : ""}
+                    className={
+                      !profile.avatar_url && profile.avatar_key === a.key
+                        ? "selected"
+                        : ""
+                    }
                     disabled={busy}
                     onClick={() => saveAvatar(a.key)}
                     aria-label={a.label}

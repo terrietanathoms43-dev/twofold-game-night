@@ -1901,3 +1901,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @media (prefers-reduced-motion: reduce) {
   *, *:before, *:after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+.currentAvatarChoice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid #e4d3df;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #fff7fa, #f4efff);
+}
+.currentAvatarChoice > div {
+  display: grid;
+  gap: 4px;
+}
+.currentAvatarChoice small {
+  color: var(--rose);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+.currentAvatarChoice b { font-size: 17px; color: var(--plum); }
+.currentAvatarChoice span { color: var(--muted); font-size: 13px; }
