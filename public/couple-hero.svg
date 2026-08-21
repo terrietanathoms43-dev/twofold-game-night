@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 390" role="img" aria-labelledby="title desc">
+  <title id="title">Twofold game-night hearts</title>
+  <desc id="desc">Two friendly heart-shaped game controllers surrounded by stars and sparkles.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff1f6"/><stop offset="1" stop-color="#eee7ff"/></linearGradient>
+    <linearGradient id="pink" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff8cad"/><stop offset="1" stop-color="#e35f91"/></linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9d82e8"/><stop offset="1" stop-color="#7454bf"/></linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#5a3062" flood-opacity=".18"/></filter>
+  </defs>
+  <rect x="12" y="12" width="496" height="366" rx="64" fill="url(#bg)"/>
+  <circle cx="88" cy="86" r="34" fill="#ffd8e4" opacity=".75"/><circle cx="433" cy="295" r="48" fill="#ded4ff" opacity=".8"/>
+  <g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".95"><path d="M70 155h22m-11-11v22"/><path d="M420 90h20m-10-10v20"/><path d="m460 166 8 8 14-16"/></g>
+  <g filter="url(#shadow)" transform="rotate(-8 182 216)">
+    <path d="M182 309C157 283 93 242 87 183c-5-45 23-75 59-76 24 0 40 12 51 30 12-18 29-30 53-30 36 1 63 31 58 76-7 59-72 100-98 126-8 8-20 8-28 0Z" fill="url(#pink)"/>
+    <circle cx="159" cy="198" r="34" fill="#fff" opacity=".95"/><path d="M143 198h32m-16-16v32" stroke="#c8517e" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="238" cy="184" r="10" fill="#fff"/><circle cx="259" cy="207" r="10" fill="#ffe5ee"/>
+  </g>
+  <g filter="url(#shadow)" transform="rotate(8 339 203)">
+    <path d="M339 298c-25-26-89-67-95-126-5-45 23-75 59-76 24 0 40 12 51 30 12-18 29-30 53-30 36 1 63 31 58 76-7 59-72 100-98 126-8 8-20 8-28 0Z" fill="url(#purple)"/>
+    <circle cx="316" cy="187" r="34" fill="#fff" opacity=".95"/><path d="M300 187h32m-16-16v32" stroke="#7355ba" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="395" cy="173" r="10" fill="#fff"/><circle cx="416" cy="196" r="10" fill="#ebe5ff"/>
+  </g>
+  <path d="M254 65c9-17 35-8 35 10 0 15-18 26-35 40-17-14-35-25-35-40 0-18 26-27 35-10Z" fill="#ff789e"/>
+  <g fill="#f6b84b"><path d="m119 302 6 14 14 6-14 6-6 14-6-14-14-6 14-6Z"/><path d="m404 61 5 11 11 5-11 5-5 11-5-11-11-5 11-5Z"/></g>
+</svg>
