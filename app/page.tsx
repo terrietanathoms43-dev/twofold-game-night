@@ -6,6 +6,7 @@ import Image from "next/image";
 import { supabase } from "../lib/supabase";
 import { GAMES } from "../lib/games";
 import RoomCommunication from "./RoomCommunication";
+import CoupleChat from "./CoupleChat";
 type Profile = {
   id: string;
   display_name: string;
@@ -351,6 +352,14 @@ export default function Home() {
         setHistory(nights);
         setCustomQuestions(q || []);
         setResumableNight(active);
+        const requestedRoom = new URLSearchParams(window.location.search).get("callRoom");
+        const requestedNight = new URLSearchParams(window.location.search).get("callNight");
+        if (active && (requestedRoom === active.room_code || requestedNight === active.id)) {
+          setNight(active);
+          await loadGameState(active.id);
+          setView(active.status === "playing" ? "play" : "lobby");
+          window.history.replaceState({}, "", window.location.pathname);
+        }
         if (ids.length) {
           const [{ data: hp }, { data: gr }] = await Promise.all([
             supabase
@@ -996,7 +1005,7 @@ export default function Home() {
                 <small>YOUR PRIVATE COUPLE SPACE</small>
                 <h1>Good evening, {profile.display_name} ♡</h1>
               </div>
-              <button className="notificationButton" aria-label="Notifications">♧<span>2</span></button>
+              <button className="notificationButton" aria-label="Open chat" onClick={() => window.dispatchEvent(new Event("twofold:open-chat"))}>💬</button>
             </div>
             {resumableNight && (
               <section className="resumeCard">
@@ -1947,11 +1956,14 @@ export default function Home() {
             </div>
           </Simple>
         )}
+        {couple && partner && <CoupleChat coupleId={couple.id} userId={profile.id} partnerName={partner.display_name} />}
         {night && partner && ["lobby", "play"].includes(view) && (
           <RoomCommunication
             nightId={night.id}
             userId={profile.id}
+            partnerId={partner.id}
             partnerName={partner.display_name}
+            chatEnabled={false}
           />
         )}
       </main>

@@ -14,10 +14,13 @@ type Message = {
 type Props = {
   nightId: string;
   userId: string;
+  partnerId: string;
   partnerName: string;
+  chatEnabled?: boolean;
 };
 
 type CallOffer = {
+  inviteId?: string;
   sender: string;
   mode: "audio" | "video";
   description: RTCSessionDescriptionInit;
@@ -38,7 +41,7 @@ function stickerFrom(body: string) {
   return match ? STICKERS.find((item) => item.key === match[1]) : null;
 }
 
-export default function RoomCommunication({ nightId, userId, partnerName }: Props) {
+export default function RoomCommunication({ nightId, userId, partnerId, partnerName, chatEnabled = true }: Props) {
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
@@ -71,6 +74,10 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
       .order("created_at")
       .limit(200)
       .then(({ data }) => setMessages((data as Message[]) || []));
+    supabase.from("twf_call_invites").select("id,caller_id,mode,description")
+      .eq("game_night_id", nightId).eq("recipient_id", userId).eq("status", "pending")
+      .gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => { if (active && data) setIncoming({ inviteId: data.id, sender: data.caller_id, mode: data.mode, description: data.description } as CallOffer); });
 
     void supabase.realtime.setAuth();
     const channel = supabase
@@ -93,7 +100,16 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
           ),
       )
       .on("broadcast", { event: "call-offer" }, ({ payload }) => {
-        if (payload.sender !== userId) setIncoming(payload as CallOffer);
+        if (payload.sender !== userId) {
+          setIncoming(payload as CallOffer);
+          void showIncomingNotification((payload as CallOffer).mode);
+        }
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "twf_call_invites", filter: "game_night_id=eq." + nightId }, ({ new: row }) => {
+        if (row.recipient_id === userId && row.status === "pending") {
+          setIncoming({ inviteId: row.id, sender: row.caller_id, mode: row.mode, description: row.description } as CallOffer);
+          void showIncomingNotification(row.mode as "audio" | "video");
+        }
       })
       .on("broadcast", { event: "call-answer" }, async ({ payload }) => {
         if (payload.sender === userId || !peerRef.current) return;
@@ -132,7 +148,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
       peerRef.current?.close();
       supabase.removeChannel(channel);
     };
-  }, [nightId, userId]);
+  }, [nightId, userId, partnerName]); // eslint-disable-line react-hooks/exhaustive-deps -- channel is intentionally recreated only when room identity changes
 
   useEffect(() => {
     if (chatOpen) {
@@ -160,6 +176,19 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
   function stopMedia() {
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
     localStreamRef.current = null;
+  }
+
+  async function showIncomingNotification(mode: "audio" | "video") {
+    if (document.visibilityState === "visible" || !("Notification" in window) || Notification.permission !== "granted") return;
+    const registration = await navigator.serviceWorker?.ready;
+    await registration?.showNotification(`${partnerName} is calling`, {
+      body: `Incoming ${mode === "video" ? "video" : "voice"} call on Twofold`,
+      icon: "/twofold-icon-192-v2.png",
+      badge: "/twofold-icon-192-v2.png",
+      tag: `twofold-call-${nightId}`,
+      requireInteraction: true,
+      data: { url: `/?callNight=${nightId}` },
+    });
   }
 
   async function createPeer() {
@@ -220,11 +249,33 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
       const description = await peer.createOffer();
       await peer.setLocalDescription(description);
+      if (peer.iceGatheringState !== "complete") {
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          let timeoutId = 0;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeoutId);
+            peer.removeEventListener("icegatheringstatechange", check);
+            resolve();
+          };
+          const check = () => { if (peer.iceGatheringState === "complete") finish(); };
+          peer.addEventListener("icegatheringstatechange", check);
+          timeoutId = window.setTimeout(finish, 1800);
+        });
+      }
+      const completeDescription = peer.localDescription?.toJSON() || description;
+      const { data: invite, error: inviteError } = await supabase.from("twf_call_invites").insert({
+        game_night_id: nightId, caller_id: userId, recipient_id: partnerId, mode, description: completeDescription,
+      }).select("id").single();
+      if (inviteError) throw inviteError;
       await channelRef.current?.send({
         type: "broadcast",
         event: "call-offer",
-        payload: { sender: userId, mode, description },
+        payload: { inviteId: invite.id, sender: userId, mode, description: completeDescription },
       });
+      void supabase.functions.invoke("notify-call", { body: { nightId, mode } });
     } catch {
       endCall(false);
       setCallStatus("Camera or microphone permission was not granted.");
@@ -252,10 +303,16 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
         event: "call-answer",
         payload: { sender: userId, description },
       });
+      if (offer.inviteId) await supabase.from("twf_call_invites").update({ status: "accepted" }).eq("id", offer.inviteId);
     } catch {
       endCall(true);
       setCallStatus("Camera or microphone permission was not granted.");
     }
+  }
+
+  async function declineCall() {
+    if (incoming?.inviteId) await supabase.from("twf_call_invites").update({ status: "declined" }).eq("id", incoming.inviteId);
+    endCall(true);
   }
 
   function endCall(notify = true) {
@@ -333,7 +390,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
           <b>{incoming.mode === "video" ? "Video" : "Voice"} call</b>
           <span>{partnerName} is calling…</span>
           <button className="acceptCall" onClick={acceptCall}>Accept</button>
-          <button className="declineCall" onClick={() => endCall(true)}>Decline</button>
+          <button className="declineCall" onClick={declineCall}>Decline</button>
         </div>
       )}
 
@@ -349,7 +406,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
             <button onClick={() => setCallMinimized((value) => !value)}>
               {callMinimized ? "Expand" : "Minimize"}
             </button>
-            <button onClick={toggleChat}>Chat</button>
+            {chatEnabled && <button onClick={toggleChat}>Chat</button>}
             <button onClick={toggleMute}>{muted ? "Unmute" : "Mute"}</button>
             {callMode === "video" && (
               <button onClick={toggleCamera}>{cameraOff ? "Camera on" : "Camera off"}</button>
@@ -359,7 +416,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
         </div>
       )}
 
-      {chatOpen && (
+      {chatEnabled && chatOpen && (
         <aside className="chatPanel" aria-label="Game-night chat">
           <header>
             <div><b>Room chat</b><span>Private to both partners</span></div>
@@ -405,9 +462,9 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
       )}
 
       <div className={"commDock" + (callMode ? " inCall" : "")} aria-label="Room communication controls">
-        <button onClick={toggleChat}>
+        {chatEnabled && <button onClick={toggleChat}>
           Chat{Math.max(0, messages.length - lastSeenCount) > 0 ? ` (${Math.max(0, messages.length - lastSeenCount)})` : ""}
-        </button>
+        </button>}
         {!callMode && (
           <>
           <button disabled={!channelReady} onClick={() => startCall("audio")}>
