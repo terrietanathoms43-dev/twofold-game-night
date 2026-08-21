@@ -4,6 +4,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { GAMES } from "../lib/games";
+import RoomCommunication from "./RoomCommunication";
 type Profile = {
   id: string;
   display_name: string;
@@ -204,22 +205,23 @@ export default function Home() {
     };
   }, [night?.id]);
   useEffect(() => {
-    if (!activeRound?.ends_at) {
-      setTimeLeft(null);
-      return;
-    }
-    const tick = () =>
+    const tick = () => {
+      const endsAt = activeRound?.ends_at;
       setTimeLeft(
-        Math.max(
-          0,
-          Math.ceil(
-            (new Date(activeRound.ends_at!).getTime() - Date.now()) / 1000,
-          ),
-        ),
+        endsAt
+          ? Math.max(
+              0,
+              Math.ceil((new Date(endsAt).getTime() - Date.now()) / 1000),
+            )
+          : null,
       );
-    tick();
-    const timer = setInterval(tick, 500);
-    return () => clearInterval(timer);
+    };
+    const initialTick = window.setTimeout(tick, 0);
+    const timer = activeRound?.ends_at ? window.setInterval(tick, 500) : null;
+    return () => {
+      window.clearTimeout(initialTick);
+      if (timer) window.clearInterval(timer);
+    };
   }, [activeRound?.ends_at]);
   async function signedProfile(person: Profile | null) {
     if (!person?.avatar_url) return person;
@@ -414,7 +416,10 @@ export default function Home() {
     setBusy(false);
   }
   async function makeNight() {
-    if (!couple) return;
+    if (!couple || selected.length === 0) {
+      setMsg("Choose at least one game first.");
+      return;
+    }
     setBusy(true);
     if (resumableNight)
       await supabase.rpc("twf_cancel_game_night", {
@@ -450,6 +455,16 @@ export default function Home() {
     await loadPlayers(n.id);
     setView("lobby");
     setBusy(false);
+  }
+  function moveSelected(gameKey: string, direction: -1 | 1) {
+    setSelected((current) => {
+      const from = current.indexOf(gameKey);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= current.length) return current;
+      const next = [...current];
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
   }
   async function resumeNight() {
     if (!resumableNight) return;
@@ -982,6 +997,71 @@ export default function Home() {
                 <b>{selected.length}</b> selected
               </div>
             </div>
+            <section className="lineupBuilder" aria-label="Selected game lineup">
+              <div className="lineupBuilderHead">
+                <div>
+                  <small>STEP 2 · ARRANGE &amp; CONTINUE</small>
+                  <h2>Your game-night lineup</h2>
+                  <p>
+                    Use the arrows to set the play order, then create your
+                    private room.
+                  </p>
+                </div>
+                <button
+                  className="primary createRoomTop"
+                  disabled={selected.length === 0 || busy}
+                  onClick={makeNight}
+                >
+                  {busy ? "Creating room…" : "Create room & continue →"}
+                </button>
+              </div>
+              {selected.length ? (
+                <ol className="selectedLineup">
+                  {selected.map((key, index) => {
+                    const chosen = GAMES.find((item) => item.key === key);
+                    return (
+                      <li key={key}>
+                        <b>{index + 1}</b>
+                        <span aria-hidden="true">{chosen?.icon}</span>
+                        <strong>{chosen?.title}</strong>
+                        <div>
+                          <button
+                            type="button"
+                            aria-label={`Move ${chosen?.title} earlier`}
+                            disabled={index === 0}
+                            onClick={() => moveSelected(key, -1)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Move ${chosen?.title} later`}
+                            disabled={index === selected.length - 1}
+                            onClick={() => moveSelected(key, 1)}
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="removeLineup"
+                            aria-label={`Remove ${chosen?.title}`}
+                            onClick={() =>
+                              setSelected((items) =>
+                                items.filter((item) => item !== key),
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <p className="emptyLineup">Choose at least one game below.</p>
+              )}
+            </section>
             <div className="games">
               {GAMES.map((g) => (
                 <button
@@ -1009,10 +1089,10 @@ export default function Home() {
               </span>
               <button
                 className="primary"
-                disabled={selected.length < 2 || busy}
+                disabled={selected.length === 0 || busy}
                 onClick={makeNight}
               >
-                Create room →
+                {busy ? "Creating room…" : "Create room & continue →"}
               </button>
             </footer>
           </div>
@@ -1483,6 +1563,13 @@ export default function Home() {
               </p>
             </div>
           </Simple>
+        )}
+        {night && partner && ["lobby", "play"].includes(view) && (
+          <RoomCommunication
+            nightId={night.id}
+            userId={profile.id}
+            partnerName={partner.display_name}
+          />
         )}
       </main>
     </div>

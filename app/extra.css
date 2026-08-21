@@ -55,7 +55,7 @@
 .authPanel label {
   display: grid;
   gap: 7px;
-  font-size: 11px;
+  font-size:13px;
   font-weight: bold;
 }
 .authPanel input,
@@ -89,7 +89,7 @@
   border: 0;
   background: none;
   color: var(--plum);
-  font-size: 11px;
+  font-size:13px;
 }
 .soloCard {
   min-height: 100vh;
@@ -148,7 +148,7 @@
   margin: 25px 0;
 }
 .answerStatus {
-  font-size: 11px !important;
+  font-size:13px !important;
   background: #f2e9ee;
   padding: 10px;
   border-radius: 9px;
@@ -264,7 +264,7 @@ nav.mobileNav {
     padding: 7px 2px;
     border-radius: 9px;
     text-align: center;
-    font-size: 9px;
+    font-size:13px;
   }
   .shell nav.mobileNav button b {
     font-size: 18px;
@@ -411,7 +411,7 @@ body {
   height: 24px;
   border-radius: 999px;
   background: #f6e8ef;
-  font-size: 10px;
+  font-size:13px;
 }
 .categoryPills button.active {
   background: linear-gradient(135deg, #743f78, #965889);
@@ -422,7 +422,7 @@ body {
   background: #ffffff2c;
 }
 .showingCount {
-  font-size: 12px;
+  font-size:13px;
   color: var(--muted);
   margin: 4px 0 16px;
 }
@@ -558,7 +558,7 @@ body {
   color: var(--rose);
 }
 .avatarSettings > small {
-  font-size: 9px;
+  font-size:13px;
   letter-spacing: 1.5px;
   color: #a36d75;
   font-weight: 700;
@@ -591,7 +591,7 @@ body {
   box-shadow: 0 7px 16px rgba(71, 33, 77, 0.13);
 }
 .avatarGrid button small {
-  font-size: 9px;
+  font-size:13px;
 }
 .avatarGrid button.selected {
   border: 2px solid var(--rose);
@@ -601,7 +601,7 @@ body {
 }
 .avatarGrid button.selected:after {
   content: "✓ Selected";
-  font-size: 8px;
+  font-size:13px;
   color: #b44973;
 }
 @media (max-width: 560px) {
@@ -627,11 +627,11 @@ body {
   font-weight: 800;
 }
 .secretRole small {
-  font-size: 10px;
+  font-size:13px;
   color: var(--muted);
 }
 .customManager > small {
-  font-size: 9px;
+  font-size:13px;
   letter-spacing: 1.5px;
   color: #a36d75;
   font-weight: 700;
@@ -669,13 +669,13 @@ body {
   flex: 1;
 }
 .customList span small {
-  font-size: 8px;
+  font-size:13px;
   color: #a36d75;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 .customList span b {
-  font-size: 12px;
+  font-size:13px;
 }
 .customList > div > button {
   border: 0;
@@ -726,7 +726,7 @@ body {
   justify-content: space-between;
   gap: 10px !important;
   margin: 0 0 10px !important;
-  font-size: 11px;
+  font-size:13px;
   font-weight: 800;
 }
 .question .drawingTools button {
@@ -834,7 +834,7 @@ body {
 .statGrid article small {
   grid-column: 1/-1;
   color: #a36d75;
-  font-size: 9px;
+  font-size:13px;
   letter-spacing: 1px;
   font-weight: 800;
 }
@@ -843,7 +843,7 @@ body {
   color: var(--plum);
 }
 .statGrid article span {
-  font-size: 10px;
+  font-size:13px;
   color: var(--muted);
 }
 .champions > p {
@@ -885,7 +885,7 @@ body {
 }
 .achievements article small {
   color: var(--muted);
-  font-size: 9px;
+  font-size:13px;
 }
 .achievements .locked {
   opacity: 0.5;
@@ -893,7 +893,7 @@ body {
 }
 .profileSettings > small,
 .securitySettings > small {
-  font-size: 9px;
+  font-size:13px;
   letter-spacing: 1.5px;
   color: #a36d75;
   font-weight: 700;
@@ -940,7 +940,7 @@ body {
   color: #fff;
   padding: 10px 18px;
   text-align: center;
-  font-size: 12px;
+  font-size:13px;
   font-weight: 700;
 }
 .offlineBanner ~ aside {
@@ -963,7 +963,7 @@ body {
   margin: 5px 0;
 }
 .resumeCard small {
-  font-size: 9px;
+  font-size:13px;
   letter-spacing: 1.4px;
   color: #a34f73;
   font-weight: 800;
@@ -971,7 +971,7 @@ body {
 .resumeCard p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size:13px;
 }
 .resumeCard > div:last-child {
   display: flex;
@@ -1045,7 +1045,7 @@ body {
   justify-content: center;
   gap: 15px;
   margin-top: 25px;
-  font-size: 10px;
+  font-size:13px;
 }
 .legalLinks a {
   color: var(--muted);
@@ -1122,10 +1122,345 @@ body {
   color: #fff;
 }
 .ratingControl button small {
-  font-size: 8px;
+  font-size:13px;
 }
 @media (max-width: 500px) {
   .ratingControl > span {
     grid-template-columns: 1fr;
   }
+}
+
+/* Visible game-night setup and ordering */
+.lineupBuilder {
+  margin: 0 0 28px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(135deg, #fff, #fff4f8);
+  box-shadow: 0 14px 35px rgba(111, 63, 120, 0.08);
+}
+.lineupBuilderHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.lineupBuilderHead small {
+  color: var(--rose);
+  font-size:13px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+.lineupBuilderHead h2 {
+  margin: 6px 0 4px;
+  font: 25px Georgia, serif;
+}
+.lineupBuilderHead p,
+.emptyLineup {
+  margin: 0;
+  color: var(--muted);
+  font-size:13px;
+}
+.createRoomTop {
+  flex: 0 0 auto;
+  min-width: 205px;
+}
+.selectedLineup {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  padding: 0;
+  margin: 18px 0 0;
+  list-style: none;
+}
+.selectedLineup li {
+  display: grid;
+  grid-template-columns: 25px 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid #f0dde7;
+  border-radius: 12px;
+  background: #fff;
+}
+.selectedLineup li > b {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #f5e9ef;
+  color: var(--plum);
+  font-size:13px;
+}
+.selectedLineup li > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size:13px;
+}
+.selectedLineup li > div {
+  display: flex;
+  gap: 3px;
+}
+.selectedLineup button {
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff9fc;
+  color: var(--plum);
+}
+.selectedLineup button:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+.selectedLineup button.removeLineup {
+  color: #b94468;
+}
+.emptyLineup {
+  padding: 18px 0 2px;
+}
+@media (max-width: 700px) {
+  .lineupBuilderHead {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .createRoomTop {
+    width: 100%;
+  }
+  .selectedLineup {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 420px) {
+  .selectedLineup li {
+    grid-template-columns: 25px 24px minmax(0, 1fr);
+  }
+  .selectedLineup li > div {
+    grid-column: 3;
+  }
+}
+
+/* Private room chat and calling */
+.commDock {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 45;
+  display: flex;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 15px 40px rgba(65, 31, 70, 0.2);
+}
+.commDock button,
+.callControls button {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 14px;
+  background: #f6eaf0;
+  color: var(--plum);
+  font-size: 13px;
+  font-weight: 800;
+}
+.chatPanel {
+  position: fixed;
+  z-index: 50;
+  right: 22px;
+  bottom: 86px;
+  width: min(370px, calc(100vw - 28px));
+  height: min(540px, calc(100vh - 125px));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(54, 25, 61, 0.24);
+}
+.chatPanel > header {
+  height: auto;
+  padding: 16px;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #6f3f78, #92557e);
+  color: #fff;
+}
+.chatPanel > header div {
+  display: grid;
+  gap: 3px;
+}
+.chatPanel > header span {
+  font-size: 13px;
+  color: #eadce7;
+}
+.chatPanel > header button {
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 24px;
+}
+.chatMessages {
+  overflow-y: auto;
+  padding: 16px;
+  background: #fffafc;
+}
+.chatMessages > p {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.chatMessages > div:not(:last-child) {
+  width: fit-content;
+  max-width: 82%;
+  display: grid;
+  gap: 3px;
+  margin: 7px 0;
+  padding: 10px 12px;
+  border-radius: 14px 14px 14px 4px;
+  background: #eee4f1;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.chatMessages > div.mine {
+  margin-left: auto;
+  border-radius: 14px 14px 4px;
+  background: var(--plum);
+  color: #fff;
+}
+.chatMessages time {
+  font-size: 13px;
+  opacity: 0.68;
+}
+.chatPanel > form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+.chatPanel > form input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px;
+  font-size: 13px;
+}
+.chatPanel > form button,
+.acceptCall {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 13px;
+  background: var(--rose);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+.incomingCall {
+  position: fixed;
+  z-index: 60;
+  top: 90px;
+  left: 50%;
+  width: min(420px, calc(100vw - 28px));
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 15px;
+  transform: translateX(-50%);
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 18px 55px rgba(52, 24, 58, 0.28);
+}
+.incomingCall > b,
+.incomingCall > span {
+  grid-column: 1;
+  font-size: 13px;
+}
+.incomingCall > span { color: var(--muted); }
+.incomingCall button { grid-row: 1 / 3; }
+.incomingCall .acceptCall { grid-column: 2; }
+.declineCall {
+  grid-column: 3;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 13px;
+  background: #f4e4e8;
+  color: #a63655;
+  font-size: 13px;
+  font-weight: 800;
+}
+.callStage {
+  position: fixed;
+  z-index: 55;
+  right: 22px;
+  bottom: 22px;
+  width: min(440px, calc(100vw - 28px));
+  min-height: 260px;
+  overflow: hidden;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #3b2441, #704568);
+  box-shadow: 0 24px 80px rgba(42, 18, 47, 0.38);
+  color: #fff;
+}
+.callStage > video:first-child {
+  width: 100%;
+  height: 330px;
+  display: block;
+  object-fit: cover;
+  background: #281c2d;
+}
+.callStage.audio > video { display: none; }
+.callStage > video:nth-child(2) {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 105px;
+  height: 140px;
+  border: 2px solid #fff;
+  border-radius: 13px;
+  object-fit: cover;
+  background: #34223a;
+}
+.callIdentity {
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  display: grid;
+  gap: 3px;
+  text-shadow: 0 1px 8px #000;
+}
+.callStage.audio .callIdentity {
+  top: 70px;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+.callIdentity span { font-size: 13px; }
+.callControls {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  padding: 14px;
+}
+.callControls .hangup { background: #c8465f; color: #fff; }
+.commNotice {
+  position: fixed;
+  right: 22px;
+  bottom: 90px;
+  z-index: 44;
+  max-width: 320px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  background: #3d2943;
+  color: #fff;
+  font-size: 13px;
+}
+@media (max-width: 900px) {
+  .commDock { bottom: 78px; right: 10px; }
+  .chatPanel { bottom: 140px; right: 10px; }
+  .callStage { bottom: 78px; right: 10px; }
 }

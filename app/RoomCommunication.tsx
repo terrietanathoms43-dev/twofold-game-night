@@ -1,0 +1,305 @@
+"use client";
+
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { supabase } from "../lib/supabase";
+
+type Message = {
+  id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+};
+
+type Props = {
+  nightId: string;
+  userId: string;
+  partnerName: string;
+};
+
+export default function RoomCommunication({ nightId, userId, partnerName }: Props) {
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [draft, setDraft] = useState("");
+  const [callMode, setCallMode] = useState<"audio" | "video" | null>(null);
+  const [incoming, setIncoming] = useState<any>(null);
+  const [muted, setMuted] = useState(false);
+  const [cameraOff, setCameraOff] = useState(false);
+  const [callStatus, setCallStatus] = useState("");
+  const channelRef = useRef<any>(null);
+  const peerRef = useRef<RTCPeerConnection | null>(null);
+  const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from("twf_room_messages")
+      .select("id,sender_id,body,created_at")
+      .eq("game_night_id", nightId)
+      .order("created_at")
+      .limit(200)
+      .then(({ data }) => setMessages((data as Message[]) || []));
+
+    const channel = supabase
+      .channel("twf-room-comms-" + nightId)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "twf_room_messages",
+          filter: "game_night_id=eq." + nightId,
+        },
+        ({ new: row }) =>
+          setMessages((current) =>
+            current.some((item) => item.id === row.id)
+              ? current
+              : [...current, row as Message],
+          ),
+      )
+      .on("broadcast", { event: "call-offer" }, ({ payload }) => {
+        if (payload.sender !== userId) setIncoming(payload);
+      })
+      .on("broadcast", { event: "call-answer" }, async ({ payload }) => {
+        if (payload.sender === userId || !peerRef.current) return;
+        await peerRef.current.setRemoteDescription(payload.description);
+        for (const candidate of pendingIceRef.current)
+          await peerRef.current.addIceCandidate(candidate);
+        pendingIceRef.current = [];
+        setCallStatus("Connected");
+      })
+      .on("broadcast", { event: "call-ice" }, async ({ payload }) => {
+        if (payload.sender === userId || !payload.candidate) return;
+        if (!peerRef.current?.remoteDescription) {
+          pendingIceRef.current.push(payload.candidate);
+          return;
+        }
+        try {
+          await peerRef.current.addIceCandidate(payload.candidate);
+        } catch {
+          setCallStatus("Reconnecting…");
+        }
+      })
+      .on("broadcast", { event: "call-end" }, ({ payload }) => {
+        if (payload.sender !== userId) endCall(false);
+      })
+      .subscribe();
+    channelRef.current = channel;
+
+    return () => {
+      stopMedia();
+      peerRef.current?.close();
+      supabase.removeChannel(channel);
+    };
+  }, [nightId, userId]);
+
+  useEffect(() => {
+    if (chatOpen) messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, chatOpen]);
+
+  function stopMedia() {
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
+  }
+
+  async function createPeer() {
+    const peer = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.cloudflare.com:3478" },
+        { urls: "stun:stun.l.google.com:19302" },
+      ],
+    });
+    peer.onicecandidate = ({ candidate }) => {
+      if (candidate)
+        channelRef.current?.send({
+          type: "broadcast",
+          event: "call-ice",
+          payload: { sender: userId, candidate },
+        });
+    };
+    peer.ontrack = ({ streams }) => {
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = streams[0];
+    };
+    peer.onconnectionstatechange = () => {
+      const status = peer.connectionState;
+      setCallStatus(
+        status === "connected"
+          ? "Connected"
+          : status === "failed"
+            ? "Call connection failed"
+            : "Connecting…",
+      );
+    };
+    peerRef.current = peer;
+    return peer;
+  }
+
+  async function getMedia(mode: "audio" | "video") {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: mode === "video" ? { facingMode: "user" } : false,
+    });
+    localStreamRef.current = stream;
+    if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+    return stream;
+  }
+
+  async function startCall(mode: "audio" | "video") {
+    try {
+      setCallMode(mode);
+      setCallStatus("Calling " + partnerName + "…");
+      const stream = await getMedia(mode);
+      const peer = await createPeer();
+      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+      const description = await peer.createOffer();
+      await peer.setLocalDescription(description);
+      await channelRef.current?.send({
+        type: "broadcast",
+        event: "call-offer",
+        payload: { sender: userId, mode, description },
+      });
+    } catch {
+      endCall(false);
+      setCallStatus("Camera or microphone permission was not granted.");
+    }
+  }
+
+  async function acceptCall() {
+    const offer = incoming;
+    if (!offer) return;
+    try {
+      setIncoming(null);
+      setCallMode(offer.mode);
+      setCallStatus("Connecting…");
+      const stream = await getMedia(offer.mode);
+      const peer = await createPeer();
+      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+      await peer.setRemoteDescription(offer.description);
+      for (const candidate of pendingIceRef.current)
+        await peer.addIceCandidate(candidate);
+      pendingIceRef.current = [];
+      const description = await peer.createAnswer();
+      await peer.setLocalDescription(description);
+      await channelRef.current?.send({
+        type: "broadcast",
+        event: "call-answer",
+        payload: { sender: userId, description },
+      });
+    } catch {
+      endCall(true);
+      setCallStatus("Camera or microphone permission was not granted.");
+    }
+  }
+
+  function endCall(notify = true) {
+    if (notify)
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "call-end",
+        payload: { sender: userId },
+      });
+    stopMedia();
+    peerRef.current?.close();
+    peerRef.current = null;
+    pendingIceRef.current = [];
+    setIncoming(null);
+    setCallMode(null);
+    setMuted(false);
+    setCameraOff(false);
+    setCallStatus("");
+  }
+
+  function toggleMute() {
+    const next = !muted;
+    localStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = !next;
+    });
+    setMuted(next);
+  }
+
+  function toggleCamera() {
+    const next = !cameraOff;
+    localStreamRef.current?.getVideoTracks().forEach((track) => {
+      track.enabled = !next;
+    });
+    setCameraOff(next);
+  }
+
+  async function sendMessage(event: FormEvent) {
+    event.preventDefault();
+    const body = draft.trim();
+    if (!body) return;
+    setDraft("");
+    const { error } = await supabase.from("twf_room_messages").insert({
+      game_night_id: nightId,
+      sender_id: userId,
+      body,
+    });
+    if (error) setCallStatus("Message could not be sent.");
+  }
+
+  return (
+    <div className="roomComms">
+      {incoming && !callMode && (
+        <div className="incomingCall" role="dialog" aria-label="Incoming call">
+          <b>{incoming.mode === "video" ? "Video" : "Voice"} call</b>
+          <span>{partnerName} is calling…</span>
+          <button className="acceptCall" onClick={acceptCall}>Accept</button>
+          <button className="declineCall" onClick={() => endCall(true)}>Decline</button>
+        </div>
+      )}
+
+      {callMode && (
+        <div className={"callStage " + callMode}>
+          <video ref={remoteVideoRef} autoPlay playsInline aria-label={partnerName + " video"} />
+          <video ref={localVideoRef} autoPlay muted playsInline aria-label="Your video" />
+          <div className="callIdentity">
+            <b>{partnerName}</b>
+            <span>{callStatus}</span>
+          </div>
+          <div className="callControls">
+            <button onClick={toggleMute}>{muted ? "Unmute" : "Mute"}</button>
+            {callMode === "video" && (
+              <button onClick={toggleCamera}>{cameraOff ? "Camera on" : "Camera off"}</button>
+            )}
+            <button className="hangup" onClick={() => endCall(true)}>End call</button>
+          </div>
+        </div>
+      )}
+
+      {chatOpen && (
+        <aside className="chatPanel" aria-label="Game-night chat">
+          <header>
+            <div><b>Room chat</b><span>Private to both partners</span></div>
+            <button onClick={() => setChatOpen(false)} aria-label="Close chat">×</button>
+          </header>
+          <div className="chatMessages">
+            {messages.length === 0 && <p>Start the conversation.</p>}
+            {messages.map((message) => (
+              <div key={message.id} className={message.sender_id === userId ? "mine" : "theirs"}>
+                <span>{message.body}</span>
+                <time>{new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+              </div>
+            ))}
+            <div ref={messageEndRef} />
+          </div>
+          <form onSubmit={sendMessage}>
+            <input value={draft} maxLength={1000} onChange={(e) => setDraft(e.target.value)} placeholder="Write a message…" aria-label="Chat message" />
+            <button disabled={!draft.trim()} aria-label="Send message">Send</button>
+          </form>
+        </aside>
+      )}
+
+      {!callMode && (
+        <div className="commDock" aria-label="Room communication controls">
+          <button onClick={() => setChatOpen((open) => !open)}>Chat</button>
+          <button onClick={() => startCall("audio")}>Voice</button>
+          <button onClick={() => startCall("video")}>Video</button>
+        </div>
+      )}
+      {callStatus && !callMode && <div className="commNotice">{callStatus}</div>}
+    </div>
+  );
+}
