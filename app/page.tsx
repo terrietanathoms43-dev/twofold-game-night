@@ -1095,6 +1095,16 @@ export default function Home() {
                 {busy ? "Creating room…" : "Create room & continue →"}
               </button>
             </footer>
+            <div className="mobileSetupAction">
+              <span>{selected.length} selected</span>
+              <button
+                className="primary"
+                disabled={selected.length === 0 || busy}
+                onClick={makeNight}
+              >
+                {busy ? "Creating…" : "Create room & continue →"}
+              </button>
+            </div>
           </div>
         )}
         {view === "lobby" && night && (
@@ -1132,13 +1142,23 @@ export default function Home() {
               </div>
             </div>
             {isHost ? (
-              <button
-                className="primary wide"
-                disabled={!bothReady || busy}
-                onClick={start}
-              >
-                {bothReady ? "Start game night →" : "Waiting for both players"}
-              </button>
+              <div className="lobbyStart">
+                {!bothReady && (
+                  <p>
+                    Your partner must open this room and show as Ready before
+                    the game can begin.
+                  </p>
+                )}
+                <button
+                  className="primary wide"
+                  disabled={!bothReady || busy}
+                  onClick={start}
+                >
+                  {bothReady
+                    ? "Start game night →"
+                    : "Waiting for partner to join & get ready"}
+                </button>
+              </div>
             ) : (
               <p>Waiting for the room creator to start…</p>
             )}
