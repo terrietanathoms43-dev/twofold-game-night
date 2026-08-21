@@ -31,10 +31,10 @@ export const GAMES:GameDef[]=[
 ,{key:"oneWordStory",title:"One-Word Story",icon:"…",category:"Creative",mode:"creative",instructions:"Alternate one word at a time to create one surprising shared story.",prompts:["Begin with: Suddenly","Begin with: Yesterday","Begin with: Together"]}
 ,{key:"matchFive",title:"Match Five",icon:"⑤",category:"Couple",mode:"text",instructions:"List five answers independently and earn points for every shared answer.",prompts:["Five places for a day out","Five snacks for game night","Five things that make a weekend better"]}
 ,{key:"blitz",title:"This or That Blitz",icon:"↯",category:"Party",mode:"choice",instructions:"Make rapid choices and build a matching-answer streak.",prompts:["Sunrise or sunset?","Sweet or savoury?","Plan it or improvise?"]}
-,{key:"spotChange",title:"Spot the Change",icon:"◉",category:"Competitive",mode:"text",instructions:"Study the first sequence, then identify what changed in the second.",prompts:["♡ ✦ ● ▲ → ♡ ✦ ■ ▲","4 8 2 7 → 4 3 2 7","RED BLUE GOLD → RED GREEN GOLD"]}
+,{key:"spotChange",title:"Spot the Change",icon:"◉",category:"Competitive",mode:"speed",instructions:"Study the first sequence, then identify what changed in the second.",prompts:["♡ ✦ ● ▲ → ♡ ✦ ■ ▲","4 8 2 7 → 4 3 2 7","RED BLUE GOLD → RED GREEN GOLD"]}
 ,{key:"mysteryDate",title:"Mystery Date Planner",icon:"◇",category:"Cooperative",mode:"match",instructions:"Choose parts of a date separately, then reveal the combined plan.",prompts:["Choose a food for the mystery date","Choose an activity for the mystery date","Choose a setting for the mystery date"]}
 ,{key:"voiceImpression",title:"Voice Impression",icon:"♬",category:"Party",mode:"creative",instructions:"Perform the assigned safe character or mood through voice chat and let your partner guess.",prompts:["A very excited sports commentator","A sleepy news presenter","A robot ordering breakfast"]}
-,{key:"scavenger",title:"Scavenger Sprint",icon:"⌕",category:"Party",mode:"text",instructions:"Find a safe household object matching the clue before time expires.",prompts:["Find something soft","Find something beginning with B","Find something smaller than your hand"]}
+,{key:"scavenger",title:"Scavenger Sprint",icon:"⌕",category:"Party",mode:"speed",instructions:"Find a safe household object matching the clue before time expires.",prompts:["Find something soft","Find something beginning with B","Find something smaller than your hand"]}
 ,{key:"playlistMatch",title:"Playlist Match",icon:"♫",category:"Couple",mode:"match",instructions:"Enter a song title you associate with the given safe mood or memory and compare.",prompts:["A song title for a happy memory","A song title for a road trip","A song title for celebrating good news"]}
 ,{key:"appreciation",title:"Appreciation Challenge",icon:"❀",category:"Cooperative",mode:"text",instructions:"Answer thoughtful prompts to grow a shared team score.",prompts:["Name something your partner handled well recently.","What quality makes you work well as a team?","Name a small gesture you appreciate."]}
 ];
@@ -86,6 +86,8 @@ function speedPrompt(key:string,index:number){
   if(key==="word") return slot===0?`Enter a six-letter word beginning with S — round ${set+1}`:slot===1?`Enter a word that rhymes with light — round ${set+1}`:`Enter a fruit containing A — round ${set+1}`;
   if(key==="emoji") return slot===0?`Decode: ${["🌧️🐱🐶","☔🐈🐕","🌦️😺🐶"][set%3]} · card ${set+1}`:slot===1?`Decode: ${["⏰💰","⌚💵","⏳🪙"][set%3]} · card ${set+1}`:`Decode: ${["📖🐛","📚🐛","📕🐞"][set%3]} · card ${set+1}`;
   if(key==="memoryChallenge") return slot===0?`Study and repeat: ♡ ✦ ☻ ◈ ♕ · set ${set+1}`:slot===1?`Study and repeat: 7 2 9 4 1 · set ${set+1}`:`Study and repeat: Red · Blue · Gold · Green · set ${set+1}`;
+  if(key==="spotChange") return slot===0?`Spot the change: ♡ ✦ ● ▲ → ♡ ✦ ■ ▲ · card ${set+1}`:slot===1?`Spot the change: 4 8 2 7 → 4 3 2 7 · card ${set+1}`:`Spot the change: RED BLUE GOLD → RED GREEN GOLD · card ${set+1}`;
+  if(key==="scavenger") return `Find a safe household item that is ${["soft","blue","smaller than your hand","made of paper","round","useful at school","lightweight","beginning with B","found in a kitchen","able to fit in a pocket"][index%10]} · sprint ${index+1}`;
   return `Name 3 ${FIVE_TOPICS[index%FIVE_TOPICS.length]} — challenge ${index+1}`;
 }
 

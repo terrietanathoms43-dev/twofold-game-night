@@ -1159,10 +1159,11 @@ export default function Home() {
                       How to play <span>＋</span>
                     </summary>
                     <ol>
-                      {g.prompts.map((prompt) => (
+                      {g.prompts.slice(0, 3).map((prompt) => (
                         <li key={prompt}>{prompt}</li>
                       ))}
                     </ol>
+                    <p className="promptCount">100 prompts available with repeat protection.</p>
                     <p className="scoringNote">
                       {g.mode === "speed"
                         ? "Correct answers earn 100 points. The first correct answer earns a 25-point speed bonus."
