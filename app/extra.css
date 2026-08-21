@@ -2236,7 +2236,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .coupleChatMessages > div:not(:last-child) { width: fit-content; max-width: 84%; display: grid; gap: 4px; margin: 7px 0; padding: 10px 12px; border-radius: 15px 15px 15px 4px; background: #f0e6f2; overflow-wrap: anywhere; }
 .coupleChatMessages > div.mine { margin-left: auto; border-radius: 15px 15px 4px 15px; background: #6d3479; color: #fff; }
 .coupleChatMessages time { font-size: 13px; opacity: .7; }
+.coupleChatMessages > .coupleCallEvent { width: min(100%,300px); margin: 11px auto; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 10px 12px; border: 1px solid #eadbe6; border-radius: 14px; background: #fff; color: #5c3167; box-shadow: 0 5px 18px rgba(70,31,75,.06); }
+.coupleCallEvent > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #f8e8f1; font-size: 18px; }
+.coupleCallEvent > div { min-width: 0; display: grid; gap: 2px; }
+.coupleCallEvent small { color: #8c7285; font-size: 13px; }
+.coupleCallEvent time { white-space: nowrap; color: #8c7285; }
 .coupleChatComposer { border-top: 1px solid #eadde5; background: #fff; }
+.coupleCallActions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 9px 10px 0; }
+.coupleCallActions button { min-height: 40px; border: 0; border-radius: 11px; background: linear-gradient(120deg,#f8e4ee,#eee5fa); color: #63306f; font-size: 13px; font-weight: 900; }
 .coupleChatComposer form { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 7px; padding: 10px; }
 .coupleChatComposer form input { min-width: 0; border: 1px solid #dfceda; border-radius: 11px; padding: 11px; font-size: 13px; }
 .coupleChatComposer form button { border: 0; border-radius: 10px; padding: 10px 12px; background: #f2e7ef; color: #5f286c; font-weight: 900; }
@@ -2245,5 +2252,5 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .coupleEmojiTray button { min-height: 35px; border: 0; border-radius: 9px; background: #fff3f7; }
 .enableAlerts,.alertNotice { width: 100%; border: 0; border-top: 1px solid #f0e4eb; padding: 9px 12px; background: #fff8fb; color: #6a3475; font-size: 13px; font-weight: 800; }
 .alertNotice { color: #2f7652; }
-@media(max-width:900px){.coupleChatButton{right:10px;bottom:76px}.coupleChatPanel{inset:76px 8px 72px;width:auto;height:auto;max-height:none;border-radius:18px}}
-@media(max-width:560px){.coupleChatPanel{inset:8px 6px 72px;border-radius:15px}.coupleChatButton{min-width:54px;padding:10px}.coupleChatButton span{display:none}.coupleChatMessages>div:not(:last-child){max-width:92%}}
+@media(max-width:900px){.coupleChatPanel{inset:76px 8px 72px;width:auto;height:auto;max-height:none;border-radius:18px}}
+@media(max-width:560px){.coupleChatPanel{inset:8px 6px 72px;border-radius:15px}.coupleChatMessages>div:not(:last-child){max-width:92%}.coupleChatMessages>.coupleCallEvent{max-width:100%}}

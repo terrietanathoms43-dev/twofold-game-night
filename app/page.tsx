@@ -153,6 +153,7 @@ export default function Home() {
     [playStyle, setPlayStyle] = useState<"competitive" | "cooperative">("competitive"),
     [difficulty, setDifficulty] = useState<"easy" | "standard" | "hard">("standard"),
     [online, setOnline] = useState(true),
+    [chatUnread, setChatUnread] = useState(0),
     [copied, setCopied] = useState(false),
     [msg, setMsg] = useState(""),
     [busy, setBusy] = useState(false);
@@ -170,6 +171,11 @@ export default function Home() {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
   }, []);
   useEffect(() => {
+    const update = (event: Event) => setChatUnread(Number((event as CustomEvent<{ count?: number }>).detail?.count || 0));
+    window.addEventListener("twofold:chat-unread", update);
+    return () => window.removeEventListener("twofold:chat-unread", update);
+  }, []);
+  useEffect(() => {
     if (!preferenceCoupleId) return;
     const loadPreferences = window.setTimeout(() => {
       try {
@@ -181,6 +187,11 @@ export default function Home() {
       }
     }, 0);
     return () => window.clearTimeout(loadPreferences);
+  }, [preferenceCoupleId]);
+  useEffect(() => {
+    if (!preferenceCoupleId || new URLSearchParams(window.location.search).get("openChat") !== "1") return;
+    window.dispatchEvent(new Event("twofold:open-chat"));
+    window.history.replaceState({}, "", window.location.pathname);
   }, [preferenceCoupleId]);
   useEffect(() => {
     if (session?.user) loadAccount(session.user.id);
@@ -988,6 +999,7 @@ export default function Home() {
               <small>{partner ? `Paired with ${partner.display_name}` : "Private space"}</small>
             </div>
             <Avatar person={profile} size="small" />
+            <button className="notificationButton" aria-label="Open chat" onClick={() => window.dispatchEvent(new Event("twofold:open-chat"))}>💬{chatUnread > 0 && <span>{chatUnread > 9 ? "9+" : chatUnread}</span>}</button>
             <button className="signout" onClick={() => supabase.auth.signOut()}>
               Sign out
             </button>
@@ -1023,7 +1035,6 @@ export default function Home() {
                 <small>YOUR PRIVATE COUPLE SPACE</small>
                 <h1>Good evening, {profile.display_name} ♡</h1>
               </div>
-              <button className="notificationButton" aria-label="Open chat" onClick={() => window.dispatchEvent(new Event("twofold:open-chat"))}>💬</button>
             </div>
             {resumableNight && (
               <section className="resumeCard">
@@ -1975,9 +1986,10 @@ export default function Home() {
           </Simple>
         )}
         {couple && partner && <CoupleChat coupleId={couple.id} userId={profile.id} partnerName={partner.display_name} />}
-        {night && partner && ["lobby", "play"].includes(view) && (
+        {couple && partner && (
           <RoomCommunication
-            nightId={night.id}
+            nightId={night?.id}
+            coupleId={couple.id}
             userId={profile.id}
             partnerId={partner.id}
             partnerName={partner.display_name}
