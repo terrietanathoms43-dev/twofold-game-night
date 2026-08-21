@@ -23,6 +23,21 @@ type CallOffer = {
   description: RTCSessionDescriptionInit;
 };
 
+const CHAT_EMOJIS = ["♡", "😂", "🥰", "😊", "😭", "🎉", "🔥", "👏", "✨", "🎮", "🏆", "💭"];
+const STICKERS = [
+  { key: "love", icon: "💗", label: "Sending love" },
+  { key: "gg", icon: "🏆", label: "Good game!" },
+  { key: "laugh", icon: "🤣", label: "Too funny!" },
+  { key: "wow", icon: "🤩", label: "Wow!" },
+  { key: "team", icon: "🙌", label: "Dream team" },
+  { key: "hype", icon: "🎉", label: "Let’s go!" },
+];
+
+function stickerFrom(body: string) {
+  const match = body.match(/^::sticker:([a-z]+)::$/);
+  return match ? STICKERS.find((item) => item.key === match[1]) : null;
+}
+
 export default function RoomCommunication({ nightId, userId, partnerName }: Props) {
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -34,6 +49,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
   const [cameraOff, setCameraOff] = useState(false);
   const [callMinimized, setCallMinimized] = useState(false);
   const [callStatus, setCallStatus] = useState("");
+  const [tray, setTray] = useState<"emoji" | "sticker" | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const endCallRef = useRef<(notify?: boolean) => void>(() => undefined);
   const peerRef = useRef<RTCPeerConnection | null>(null);
@@ -268,6 +284,16 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
     if (error) setCallStatus("Message could not be sent.");
   }
 
+  async function sendSticker(key: string) {
+    setTray(null);
+    const { error } = await supabase.from("twf_room_messages").insert({
+      game_night_id: nightId,
+      sender_id: userId,
+      body: `::sticker:${key}::`,
+    });
+    if (error) setCallStatus("Sticker could not be sent.");
+  }
+
   return (
     <div className="roomComms">
       {incoming && !callMode && (
@@ -311,16 +337,36 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
             {messages.length === 0 && <p>Start the conversation.</p>}
             {messages.map((message) => (
               <div key={message.id} className={message.sender_id === userId ? "mine" : "theirs"}>
-                <span>{message.body}</span>
+                {stickerFrom(message.body) ? (
+                  <span className="chatSticker" aria-label={stickerFrom(message.body)!.label}>
+                    <b>{stickerFrom(message.body)!.icon}</b>
+                    <small>{stickerFrom(message.body)!.label}</small>
+                  </span>
+                ) : <span>{message.body}</span>}
                 <time>{new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
               </div>
             ))}
             <div ref={messageEndRef} />
           </div>
-          <form onSubmit={sendMessage}>
-            <input value={draft} maxLength={1000} onChange={(e) => setDraft(e.target.value)} placeholder="Write a message…" aria-label="Chat message" />
-            <button disabled={!draft.trim()} aria-label="Send message">Send</button>
-          </form>
+          <div className="chatComposer">
+            {tray && (
+              <div className={tray === "emoji" ? "emojiTray" : "stickerTray"}>
+                {tray === "emoji" ? CHAT_EMOJIS.map((emoji) => (
+                  <button key={emoji} onClick={() => setDraft((value) => value + emoji)} aria-label={`Add ${emoji}`}>{emoji}</button>
+                )) : STICKERS.map((sticker) => (
+                  <button key={sticker.key} onClick={() => sendSticker(sticker.key)} aria-label={`Send ${sticker.label}`}>
+                    <b>{sticker.icon}</b><small>{sticker.label}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+            <form onSubmit={sendMessage}>
+              <button type="button" className="trayButton" onClick={() => setTray((value) => value === "emoji" ? null : "emoji")} aria-label="Open emojis">😊</button>
+              <button type="button" className="trayButton" onClick={() => setTray((value) => value === "sticker" ? null : "sticker")} aria-label="Open stickers">Sticker</button>
+              <input value={draft} maxLength={1000} onChange={(e) => setDraft(e.target.value)} placeholder="Write a message…" aria-label="Chat message" />
+              <button disabled={!draft.trim()} aria-label="Send message">Send</button>
+            </form>
+          </div>
         </aside>
       )}
 

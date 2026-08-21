@@ -725,10 +725,24 @@ body {
   height: 30px;
   border-radius: 50%;
 }
+.customActions { display: flex; gap: 7px; }
+.customActions button {
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: #f3e6ec;
+  color: #874363;
+  font-size: 13px;
+  font-weight: 750;
+}
+.customEdit { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; width: 100%; }
+.customEdit input { min-width: 0; }
 @media (max-width: 760px) {
   .customManager form {
     grid-template-columns: 1fr;
   }
+  .customEdit { grid-template-columns: 1fr 1fr; }
+  .customEdit input { grid-column: 1 / -1; }
   .secretRole {
     display: grid !important;
     width: 100%;
@@ -1399,6 +1413,45 @@ body {
   font-size: 13px;
   font-weight: 800;
 }
+.chatComposer { position: relative; border-top: 1px solid var(--line); background: #fff; }
+.chatComposer > form { display: flex; gap: 7px; padding: 11px; }
+.chatComposer > form input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px;
+  font-size: 13px;
+}
+.chatComposer > form button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--rose);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+.chatComposer > form .trayButton { background: #f3e7ed; color: var(--plum); }
+.emojiTray,.stickerTray {
+  display: grid;
+  grid-template-columns: repeat(6,1fr);
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+.emojiTray button,.stickerTray button {
+  border: 0;
+  border-radius: 10px;
+  background: #fff5f8;
+  min-height: 38px;
+  font-size: 20px;
+}
+.stickerTray { grid-template-columns: repeat(3,1fr); }
+.stickerTray button { display: grid; justify-items: center; gap: 2px; padding: 8px; }
+.stickerTray small { font-size: 13px; color: var(--plum); }
+.chatSticker { display: grid; justify-items: center; min-width: 105px; padding: 5px; }
+.chatSticker b { font-size: 42px; line-height: 1; }
+.chatSticker small { font-size: 13px; font-weight: 750; }
 .incomingCall {
   position: fixed;
   z-index: 60;

@@ -432,15 +432,34 @@ export default function Home() {
   }
   async function addCustomQuestion(gameKey: string, question: string) {
     if (!couple || !question.trim()) return;
+    const cleaned = question.trim();
+    const formatted = gameKey === "memory" && !cleaned.endsWith("?")
+      ? `What do you remember about “${cleaned.replace(/[.!]+$/, "")}”?`
+      : cleaned;
     setBusy(true);
     const { error } = await supabase.from("twf_custom_questions").insert({
       couple_id: couple.id,
       created_by: profile!.id,
       game_key: gameKey,
-      question: question.trim(),
+      question: formatted,
     });
     if (error) setMsg(error.message);
     else await loadAccount(profile!.id);
+    setBusy(false);
+  }
+  async function editCustomQuestion(id: string, question: string) {
+    const cleaned = question.trim();
+    if (cleaned.length < 3) return;
+    setBusy(true);
+    const { error } = await supabase
+      .from("twf_custom_questions")
+      .update({ question: cleaned })
+      .eq("id", id)
+      .eq("created_by", profile!.id);
+    if (error) setMsg(error.message);
+    else setCustomQuestions((items) =>
+      items.map((item) => item.id === id ? { ...item, question: cleaned } : item),
+    );
     setBusy(false);
   }
   async function deleteCustomQuestion(id: string) {
@@ -1765,6 +1784,7 @@ export default function Home() {
               currentUser={profile.id}
               busy={busy}
               add={addCustomQuestion}
+              edit={editCustomQuestion}
               remove={deleteCustomQuestion}
             />
             <SecuritySettings email={session.user.email || ""} />
@@ -2430,23 +2450,27 @@ function CustomQuestionManager({
   currentUser,
   busy,
   add,
+  edit,
   remove,
 }: {
   questions: any[];
   currentUser: string;
   busy: boolean;
   add: (g: string, q: string) => void;
+  edit: (id: string, q: string) => void;
   remove: (id: string) => void;
 }) {
   const [q, setQ] = useState(""),
-    [g, setG] = useState("memory");
+    [g, setG] = useState("memory"),
+    [editing, setEditing] = useState<string | null>(null),
+    [editValue, setEditValue] = useState("");
   return (
     <div className="accountCard customManager">
       <small>CUSTOM COUPLE QUESTIONS</small>
       <h3>Make the games yours</h3>
       <p>
-        Add shared memories, inside jokes, and questions. Answers are supplied
-        privately during play.
+        Add shared memories, inside jokes, and questions. Memory notes are
+        automatically turned into questions for the game.
       </p>
       <form
         onSubmit={(e) => {
@@ -2468,7 +2492,7 @@ function CustomQuestionManager({
           value={q}
           maxLength={240}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Add a memory or personal question…"
+          placeholder={g === "memory" ? "Add a memory, e.g. our first beach trip…" : "Add a personal question…"}
         />
         <button className="primary" disabled={busy || q.trim().length < 3}>
           Add question
@@ -2480,20 +2504,25 @@ function CustomQuestionManager({
         ) : (
           questions.map((item) => (
             <div key={item.id}>
-              <span>
-                <small>
-                  {GAMES.find((x) => x.key === item.game_key)?.title ||
-                    item.game_key}
-                </small>
-                <b>{item.question}</b>
-              </span>
-              {item.created_by === currentUser && (
-                <button
-                  onClick={() => remove(item.id)}
-                  aria-label="Delete question"
-                >
-                  ×
-                </button>
+              {editing === item.id ? (
+                <div className="customEdit">
+                  <input value={editValue} maxLength={240} onChange={(e) => setEditValue(e.target.value)} aria-label="Edit question" />
+                  <button className="primary" disabled={busy || editValue.trim().length < 3} onClick={() => { edit(item.id, editValue); setEditing(null); }}>Save</button>
+                  <button className="secondary" onClick={() => setEditing(null)}>Cancel</button>
+                </div>
+              ) : (
+                <>
+                  <span>
+                    <small>{GAMES.find((x) => x.key === item.game_key)?.title || item.game_key}</small>
+                    <b>{item.question}</b>
+                  </span>
+                  {item.created_by === currentUser && (
+                    <div className="customActions">
+                      <button onClick={() => { setEditing(item.id); setEditValue(item.question); }} aria-label="Edit question">Edit</button>
+                      <button onClick={() => remove(item.id)} aria-label="Delete question">Delete</button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ))
