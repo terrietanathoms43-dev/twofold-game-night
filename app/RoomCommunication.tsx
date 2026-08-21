@@ -327,7 +327,7 @@ export default function RoomCommunication({ nightId, userId, partnerName }: Prop
   }
 
   return (
-    <div className="roomComms">
+    <div className={"roomComms" + (chatOpen ? " chat-open" : "")}>
       {incoming && !callMode && (
         <div className="incomingCall" role="dialog" aria-label="Incoming call">
           <b>{incoming.mode === "video" ? "Video" : "Voice"} call</b>
