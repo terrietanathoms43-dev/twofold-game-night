@@ -85,6 +85,10 @@ const AVATARS = [
     label: "Player",
     colors: ["#75c7ad", "#368e7e"],
   },
+  { key: "sunshine", icon: "☀", label: "Sunshine", colors: ["#ff9f91", "#ee547b"] },
+  { key: "galaxy", icon: "♄", label: "Galaxy", colors: ["#9a65d5", "#61339b"] },
+  { key: "butterfly", icon: "❀", label: "Butterfly", colors: ["#f49bc8", "#b85cba"] },
+  { key: "paw", icon: "♣", label: "Paw", colors: ["#bf956e", "#79583e"] },
 ];
 function Avatar({
   person,
@@ -986,7 +990,14 @@ export default function Home() {
           </div>
         )}
         {view === "home" && (
-          <div className="page">
+          <div className="page homeDashboard">
+            <div className="dashboardGreeting">
+              <div>
+                <small>YOUR PRIVATE COUPLE SPACE</small>
+                <h1>Good evening, {profile.display_name} ♡</h1>
+              </div>
+              <button className="notificationButton" aria-label="Notifications">♧<span>2</span></button>
+            </div>
             {resumableNight && (
               <section className="resumeCard">
                 <div>
@@ -1090,6 +1101,35 @@ export default function Home() {
                 <h2>Have a room code?</h2>
               </div>
               <CodeForm label="Join room" action={joinRoom} />
+            </section>
+            <section className="coupleDashboardCard">
+              <div className="coupleCardHead">
+                <div>
+                  <small>YOUR COUPLE SPACE</small>
+                  <h2>{profile.display_name} &amp; {partner?.display_name || "Partner"}</h2>
+                </div>
+                <button onClick={() => setView("profile")}>View profile →</button>
+              </div>
+              <div className="dashboardPair">
+                <div><Avatar person={profile} size="large" /><b>{profile.display_name}</b><small>You</small></div>
+                <span>♡</span>
+                <div><Avatar person={partner} size="large" /><b>{partner?.display_name || "Partner"}</b><small>Partner</small></div>
+              </div>
+              <div className="coupleCodeRow"><span>Couple code</span><b>{couple.invite_code}</b><button onClick={() => navigator.clipboard.writeText(couple.invite_code)}>Copy</button></div>
+            </section>
+            <section className="recommendedDashboard">
+              <div className="sectionHeading"><div><small>PICK SOMETHING FUN</small><h2>Recommended for you</h2></div><button onClick={() => setView("games")}>View all games →</button></div>
+              <div className="recommendGrid">
+                {GAMES.slice(0, 4).map((item) => (
+                  <article key={item.key}>
+                    <b className="gameIcon">{item.icon}</b>
+                    <small>{item.category}</small>
+                    <h3>{item.title}</h3>
+                    <p>{item.instructions}</p>
+                    <button onClick={() => { setSelected([item.key]); setView("setup"); }}>Play <span>▶</span></button>
+                  </article>
+                ))}
+              </div>
             </section>
           </div>
         )}
