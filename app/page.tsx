@@ -52,6 +52,7 @@ type View =
   | "leaderboard"
   | "profile";
 const init = (s?: string) => s?.trim().slice(0, 1).toUpperCase() || "?";
+const MAX_PROFILE_PHOTO_BYTES = 10 * 1024 * 1024;
 const AVATARS = [
   {
     key: "heart",
@@ -451,9 +452,9 @@ export default function Home() {
     if (!file) return;
     if (
       !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
-      file.size > 2 * 1024 * 1024
+      file.size > MAX_PROFILE_PHOTO_BYTES
     ) {
-      setMsg("Choose a JPG, PNG, or WebP image under 2 MB.");
+      setMsg("Choose a JPG, PNG, or WebP image no larger than 10 MB.");
       return;
     }
     setBusy(true);
@@ -1929,7 +1930,7 @@ export default function Home() {
               </div>
               <label className="photoUpload">
                 <span>＋ Upload profile photo</span>
-                <small>JPG, PNG, or WebP · maximum 2 MB</small>
+                <small>JPG, PNG, or WebP · maximum 10 MB</small>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
