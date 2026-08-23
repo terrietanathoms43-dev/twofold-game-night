@@ -1492,7 +1492,7 @@ body {
 @media(max-width:760px){.setupShortcuts{align-items:stretch;flex-direction:column}.setupShortcuts button{width:100%}.nightSettings{grid-template-columns:1fr}.categoryGroups .games{grid-template-columns:1fr}.nightRecap{grid-template-columns:1fr 1fr}}
 .incomingCall {
   position: fixed;
-  z-index: 60;
+  z-index: 96;
   top: 90px;
   left: 50%;
   width: min(420px, calc(100vw - 28px));
@@ -1526,7 +1526,7 @@ body {
 }
 .callStage {
   position: fixed;
-  z-index: 55;
+  z-index: 90;
   right: 22px;
   bottom: 22px;
   width: min(440px, calc(100vw - 28px));
@@ -1625,9 +1625,8 @@ body {
 .roomComms.global-chat-open .callStage.minimized {
   right: auto;
   left: 22px;
-  z-index: 55;
+  z-index: 90;
 }
-.roomComms.global-chat-open .coupleChatPanel { z-index: 70; }
 .commDock.inCall { right: auto; left: 22px; }
 .skipQuestion {
   display: flex !important;
@@ -1680,9 +1679,9 @@ body {
   .chatComposer > form button { padding: 9px 10px; }
   .stickerTray { grid-template-columns: repeat(2,minmax(0,1fr)); max-height: 190px; overflow-y: auto; }
   .emojiTray { grid-template-columns: repeat(6,minmax(0,1fr)); }
-  .callStage.minimized { z-index: 55; max-width: calc(100vw - 20px); }
+  .callStage.minimized { z-index: 90; max-width: calc(100vw - 20px); }
   .roomComms.chat-open .callStage.video.minimized {
-    z-index: 75;
+    z-index: 90;
     top: 8px;
     right: 8px;
     bottom: auto;
