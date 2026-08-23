@@ -156,6 +156,7 @@ export default function Home() {
     [online, setOnline] = useState(true),
     [chatUnread, setChatUnread] = useState(0),
     [copied, setCopied] = useState(false),
+    [photoViewerOpen, setPhotoViewerOpen] = useState(false),
     [msg, setMsg] = useState(""),
     [busy, setBusy] = useState(false);
   const gameCategories = ["Couple", "Competitive", "Party", "Creative", "Cooperative"];
@@ -440,6 +441,7 @@ export default function Home() {
   }
   async function saveAvatar(key: string) {
     setBusy(true);
+    setPhotoViewerOpen(false);
     await supabase.rpc("twf_set_profile_photo", { p_avatar_path: null });
     const { data, error } = await supabase.rpc("twf_set_avatar", {
       p_avatar_key: key,
@@ -447,6 +449,24 @@ export default function Home() {
     if (error) setMsg(error.message);
     else setProfile(data);
     setBusy(false);
+  }
+  async function shareProfilePhoto() {
+    if (!profile?.avatar_url) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${profile.display_name}'s Twofold profile picture`,
+          url: profile.avatar_url,
+        });
+      } else {
+        await navigator.clipboard.writeText(profile.avatar_url);
+        setMsg("Profile-photo link copied.");
+      }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setMsg("The profile photo could not be shared.");
+      }
+    }
   }
   async function uploadAvatar(file?: File) {
     if (!file) return;
@@ -1912,7 +1932,29 @@ export default function Home() {
                 whenever you like.
               </p>
               <div className="currentAvatarChoice">
-                <Avatar person={profile} size="large" />
+                <div className="profilePhotoControl">
+                  <button
+                    type="button"
+                    className="profilePhotoPreviewButton"
+                    onClick={() => profile.avatar_url && setPhotoViewerOpen(true)}
+                    aria-label={profile.avatar_url ? "Open profile picture" : "Current illustrated avatar"}
+                    disabled={!profile.avatar_url}
+                  >
+                    <Avatar person={profile} size="large" />
+                  </button>
+                  <label className="profilePhotoCamera" aria-label="Change profile picture">
+                    📷
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={busy}
+                      onChange={(e) => {
+                        void uploadAvatar(e.target.files?.[0]);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
                 <div>
                   <small>CURRENT PROFILE PICTURE</small>
                   <b>
@@ -1963,6 +2005,39 @@ export default function Home() {
                 ))}
               </div>
             </div>
+            {photoViewerOpen && profile.avatar_url && (
+              <div className="profilePhotoViewer" role="dialog" aria-modal="true" aria-label="Profile picture viewer">
+                <header>
+                  <button type="button" onClick={() => setPhotoViewerOpen(false)} aria-label="Close profile picture">←</button>
+                  <b>Profile picture</b>
+                  <div>
+                    <label aria-label="Replace profile picture">
+                      ✎
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={busy}
+                        onChange={(e) => {
+                          void uploadAvatar(e.target.files?.[0]);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    <button type="button" onClick={shareProfilePhoto} aria-label="Share profile picture">↗</button>
+                  </div>
+                </header>
+                <div className="profilePhotoViewerImage">
+                  <Image
+                    src={profile.avatar_url}
+                    alt={`${profile.display_name} profile picture`}
+                    width={1080}
+                    height={1080}
+                    unoptimized
+                    priority
+                  />
+                </div>
+              </div>
+            )}
             <CustomQuestionManager
               questions={customQuestions}
               currentUser={profile.id}
