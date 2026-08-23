@@ -7,7 +7,8 @@ type Message = { id: string; sender_id: string; body: string; created_at: string
 type CallEvent = { id: string; caller_id: string; mode: "audio" | "video"; status: string; created_at: string; expires_at: string; answered_at: string | null; ended_at: string | null };
 type Props = { coupleId: string; userId: string; partnerName: string };
 const EMOJIS = ["♡", "😂", "🥰", "😊", "😭", "🎉", "🔥", "👏", "✨", "🎮", "🏆", "💭"];
-// Public by design: browsers need this key to create push subscriptions.\nconst VAPID_PUBLIC_KEY = "BJiXaRBB0lugsmkftEY5Dynv1X5W7qGAg9O8vqHUkkie4XG1Vawc7uPKoLQ7O9bkJdMOaxlZp95E5MppybKWGdc";
+// Public by design: browsers need this key to create push subscriptions.
+const VAPID_PUBLIC_KEY = "BJiXaRBB0lugsmkftEY5Dynv1X5W7qGAg9O8vqHUkkie4XG1Vawc7uPKoLQ7O9bkJdMOaxlZp95E5MppybKWGdc";
 
 function applicationKey(value: string) {
   const padding = "=".repeat((4 - value.length % 4) % 4);
