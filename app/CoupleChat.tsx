@@ -16,6 +16,14 @@ function applicationKey(value: string) {
   return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
 }
 
+function subscriptionUsesCurrentKey(subscription: PushSubscription) {
+  const configured = subscription.options.applicationServerKey;
+  if (!configured) return false;
+  const current = new Uint8Array(configured);
+  const expected = applicationKey(VAPID_PUBLIC_KEY);
+  return current.length === expected.length && current.every((value, index) => value === expected[index]);
+}
+
 export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -80,7 +88,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       try {
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();
-        if (!subscription) {
+        if (!subscription || !subscriptionUsesCurrentKey(subscription)) {
           if (active) setAlertsEnabled(false);
           return;
         }
@@ -142,11 +150,16 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
 
   async function enableAlerts() {
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) { setNotice("Push notifications are not supported on this device."); return; }
+    if (!VAPID_PUBLIC_KEY) { setNotice("Notifications are temporarily unavailable. Please try again shortly."); return; }
     const permission = await Notification.requestPermission();
     if (permission !== "granted") { setNotice("Call alerts were not enabled."); return; }
     try {
       const registration = await navigator.serviceWorker.ready;
-      const current = await registration.pushManager.getSubscription();
+      let current = await registration.pushManager.getSubscription();
+      if (current && !subscriptionUsesCurrentKey(current)) {
+        await current.unsubscribe();
+        current = null;
+      }
       const subscription = current || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: applicationKey(VAPID_PUBLIC_KEY) });
       const json = subscription.toJSON();
       const { error } = await supabase.from("twf_push_subscriptions").upsert({ user_id: userId, endpoint: subscription.endpoint, subscription: json, updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
