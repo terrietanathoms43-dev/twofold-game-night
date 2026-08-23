@@ -179,16 +179,27 @@ export default function Home() {
   }, []);
   useEffect(() => {
     if (!preferenceCoupleId) return;
-    const loadPreferences = window.setTimeout(() => {
+    let active = true;
+    async function loadPreferences() {
       try {
-        setFavorites(JSON.parse(localStorage.getItem(`twf-favorites-${preferenceCoupleId}`) || "[]"));
-        setSavedLineups(JSON.parse(localStorage.getItem(`twf-lineups-${preferenceCoupleId}`) || "[]"));
+        const localFavorites = JSON.parse(localStorage.getItem(`twf-favorites-${preferenceCoupleId}`) || "[]") as string[];
+        const localLineups = JSON.parse(localStorage.getItem(`twf-lineups-${preferenceCoupleId}`) || "[]") as string[][];
+        const { data } = await supabase.from("twf_couple_preferences")
+          .select("favorites,saved_lineups").eq("couple_id", preferenceCoupleId).maybeSingle();
+        if (!active) return;
+        const nextFavorites = Array.isArray(data?.favorites) ? data.favorites : localFavorites;
+        const nextLineups = Array.isArray(data?.saved_lineups) ? data.saved_lineups as string[][] : localLineups;
+        setFavorites(nextFavorites);
+        setSavedLineups(nextLineups);
+        localStorage.setItem(`twf-favorites-${preferenceCoupleId}`, JSON.stringify(nextFavorites));
+        localStorage.setItem(`twf-lineups-${preferenceCoupleId}`, JSON.stringify(nextLineups));
       } catch {
         setFavorites([]);
         setSavedLineups([]);
       }
-    }, 0);
-    return () => window.clearTimeout(loadPreferences);
+    }
+    void loadPreferences();
+    return () => { active = false; };
   }, [preferenceCoupleId]);
   useEffect(() => {
     if (!preferenceCoupleId || new URLSearchParams(window.location.search).get("openChat") !== "1") return;
@@ -591,17 +602,32 @@ export default function Home() {
     setSelected(picks.slice(0, 5));
     setMsg("A balanced five-game lineup is ready.");
   }
+  async function saveCloudPreferences(nextFavorites: string[], nextLineups: string[][]) {
+    if (!couple || !profile) return;
+    const { error } = await supabase.from("twf_couple_preferences").upsert({
+      couple_id: couple.id,
+      favorites: nextFavorites,
+      saved_lineups: nextLineups,
+      updated_by: profile.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "couple_id" });
+    if (error) setMsg("Your preference was saved on this device but could not sync yet.");
+  }
   function toggleFavorite(key: string) {
     const next = favorites.includes(key) ? favorites.filter((item) => item !== key) : [...favorites, key];
     setFavorites(next);
-    if (couple) localStorage.setItem(`twf-favorites-${couple.id}`, JSON.stringify(next));
+    if (couple) {
+      localStorage.setItem(`twf-favorites-${couple.id}`, JSON.stringify(next));
+      void saveCloudPreferences(next, savedLineups);
+    }
   }
   function saveLineup() {
     if (!couple || !selected.length) return;
     const next = [selected, ...savedLineups.filter((lineup) => lineup.join("|") !== selected.join("|"))].slice(0, 5);
     setSavedLineups(next);
     localStorage.setItem(`twf-lineups-${couple.id}`, JSON.stringify(next));
-    setMsg("Lineup saved on this device.");
+    void saveCloudPreferences(favorites, next);
+    setMsg("Lineup saved and synced across your devices.");
   }
   function moveSelected(gameKey: string, direction: -1 | 1) {
     setSelected((current) => {
@@ -1654,6 +1680,19 @@ export default function Home() {
                   onChange={setAnswer}
                   disabled={iAnswered}
                 />
+              ) : game.key === "matchFive" ? (
+                <FiveAnswerList
+                  value={answer}
+                  onChange={setAnswer}
+                  disabled={iAnswered}
+                />
+              ) : game.key === "wavelength" ? (
+                <WavelengthAnswer
+                  value={answer}
+                  onChange={setAnswer}
+                  disabled={iAnswered}
+                  prompt={displayPrompt}
+                />
               ) : (
                 <textarea
                   disabled={iAnswered}
@@ -2363,6 +2402,24 @@ function SecuritySettings({ email }: { email: string }) {
       await supabase.auth.signOut();
     }
   }
+  async function exportData() {
+    setBusy(true);
+    const { data, error } = await supabase.rpc("twf_export_my_data");
+    if (error) {
+      setMessage(error.message);
+      setBusy(false);
+      return;
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `twofold-data-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setMessage("Your Twofold data export was downloaded.");
+    setBusy(false);
+  }
   return (
     <div className="accountCard securitySettings">
       <small>ACCOUNT SECURITY</small>
@@ -2395,6 +2452,9 @@ function SecuritySettings({ email }: { email: string }) {
       </form>
       <button className="secondary" disabled={busy} onClick={reset}>
         Send password-reset email
+      </button>
+      <button className="secondary" disabled={busy} onClick={exportData}>
+        Download my Twofold data
       </button>
       {message && <p className="formMsg">{message}</p>}
       <details className="dangerZone">
@@ -2597,6 +2657,58 @@ function TimelineAnswer({
           />
         </label>
       ))}
+    </div>
+  );
+}
+function FiveAnswerList({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  const rows = value ? value.split(",").slice(0, 5) : [];
+  while (rows.length < 5) rows.push("");
+  function setRow(index: number, text: string) {
+    const next = [...rows];
+    next[index] = text.replace(/[,;\n]/g, " ");
+    onChange(next.join(","));
+  }
+  return (
+    <div className="structuredAnswer fiveAnswerList">
+      <small>Enter five different answers. You earn points for every answer that also appears on your partner’s list.</small>
+      {rows.map((row, index) => (
+        <label key={index}>
+          <b>{index + 1}</b>
+          <input disabled={disabled} value={row} maxLength={80} onChange={(event) => setRow(index, event.target.value)} placeholder={`Answer ${index + 1}`} />
+        </label>
+      ))}
+    </div>
+  );
+}
+function WavelengthAnswer({
+  value,
+  onChange,
+  disabled,
+  prompt,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  prompt: string;
+}) {
+  const ends = prompt.split("↔").map((part) => part.trim().replace(/\s*\(.+$/, ""));
+  return (
+    <div className="wavelengthAnswer">
+      <div><b>{ends[0] || "First"}</b><span>Choose secretly</span><b>{ends[1] || "Second"}</b></div>
+      <div role="radiogroup" aria-label="Choose a position on the wavelength">
+        {[1, 2, 3, 4, 5, 6, 7].map((point) => (
+          <button key={point} type="button" role="radio" aria-checked={value === String(point)} disabled={disabled} className={value === String(point) ? "chosen" : ""} onClick={() => onChange(String(point))}>{point}</button>
+        ))}
+      </div>
+      <small>1 is closest to the first idea; 7 is closest to the second.</small>
     </div>
   );
 }

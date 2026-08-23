@@ -223,6 +223,15 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
     localStreamRef.current = null;
   }
 
+  function reportCallFailure(message: string, context: Record<string, unknown> = {}) {
+    void supabase.rpc("twf_log_client_error", {
+      p_message: message.slice(0, 500),
+      p_source: "call",
+      p_route: window.location.pathname,
+      p_context: { nightId: nightId || null, ...context },
+    });
+  }
+
   async function showIncomingNotification(mode: "audio" | "video") {
     if (document.visibilityState === "visible" || !("Notification" in window) || Notification.permission !== "granted") return;
     const registration = await navigator.serviceWorker?.ready;
@@ -240,6 +249,7 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
     const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
     const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
     const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+    const relayConfigured = Boolean(turnUrl && turnUsername && turnCredential);
     const peer = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.cloudflare.com:3478" },
@@ -272,10 +282,15 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
         status === "connected"
           ? "Connected"
           : status === "failed"
-            ? "Call connection interrupted — retrying…"
+            ? relayConfigured
+              ? "Call connection interrupted — retrying…"
+              : "This network blocked the direct call — a relay is required"
             : "Connecting…",
       );
-      if (status === "failed") peer.restartIce();
+      if (status === "failed") {
+        reportCallFailure("WebRTC connection failed", { relayConfigured, iceConnectionState: peer.iceConnectionState });
+        peer.restartIce();
+      }
     };
     peerRef.current = peer;
     return peer;
@@ -330,6 +345,7 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
       void supabase.functions.invoke("notify-call", { body: { coupleId, mode } });
     } catch (error) {
       endCall(false);
+      reportCallFailure(error instanceof Error ? error.message : "Call setup failed", { mode });
       if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")) {
         setCallStatus("Camera or microphone permission was not granted.");
       } else {

@@ -1456,6 +1456,13 @@ body {
 .replyMessage { border: 0; background: transparent; color: inherit; opacity: .72; padding: 2px 0; font-size: 13px; text-align: left; }
 .replyPreview { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px 0; color: var(--muted); font-size: 13px; }
 .replyPreview button { border: 0; background: transparent; color: var(--plum); font-size: 20px; }
+.wavelengthAnswer { display: grid !important; grid-template-columns: 1fr !important; gap: 12px !important; margin: 26px 0 !important; padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: #fff; }
+.wavelengthAnswer > div:first-child { display: flex; justify-content: space-between; gap: 12px; color: var(--plum); }
+.wavelengthAnswer > div:first-child span { color: var(--muted); font-size: 13px; }
+.wavelengthAnswer > div:nth-child(2) { display: grid; grid-template-columns: repeat(7,1fr); gap: 7px; }
+.wavelengthAnswer button { min-height: 45px; border: 1px solid #dfcddd; border-radius: 999px; background: #f8edf4; color: var(--plum); font-weight: 900; text-align: center !important; }
+.wavelengthAnswer button.chosen { border-color: var(--plum); background: var(--plum); color: #fff; }
+.wavelengthAnswer > small { color: var(--muted); font-size: 13px; }
 
 .setupShortcuts { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 20px; border: 1px solid #ead9e5; border-radius: 20px; background: linear-gradient(135deg,#fff0f6,#f2edff); }
 .setupShortcuts > div { flex: 1; }

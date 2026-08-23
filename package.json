@@ -2,12 +2,15 @@
   "name": "twofold-game-night",
   "version": "0.1.0",
   "private": true,
-  "engines": {"node": "22.x"},
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:production": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.3",
