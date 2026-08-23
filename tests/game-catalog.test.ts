@@ -37,3 +37,13 @@ test("cloud preferences and personal export remain protected by RLS and authenti
   assert.match(source, /auth\.uid\(\)/i);
   assert.match(source, /revoke all on function public\.twf_export_my_data\(\) from public, anon/i);
 });
+
+test("TURN credentials stay server-side and require an authenticated request", async () => {
+  const route = await readFile(new URL("../app/api/turn/route.ts", import.meta.url), "utf8");
+  const callUi = await readFile(new URL("../app/RoomCommunication.tsx", import.meta.url), "utf8");
+  assert.match(route, /auth\.getUser\(token\)/);
+  assert.match(route, /process\.env\.TURN_CREDENTIAL/);
+  assert.doesNotMatch(route, /NEXT_PUBLIC_TURN/);
+  assert.match(callUi, /fetch\("\/api\/turn"/);
+  assert.doesNotMatch(callUi, /NEXT_PUBLIC_TURN/);
+});
