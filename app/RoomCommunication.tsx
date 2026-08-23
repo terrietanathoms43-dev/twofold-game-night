@@ -246,17 +246,26 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
   }
 
   async function createPeer() {
-    const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
-    const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
-    const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
-    const relayConfigured = Boolean(turnUrl && turnUsername && turnCredential);
+    let turnServers: RTCIceServer[] = [];
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch("/api/turn", {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const body = await response.json() as { iceServers?: RTCIceServer[] };
+        if (Array.isArray(body.iceServers)) turnServers = body.iceServers;
+      }
+    } catch (error) {
+      reportCallFailure("TURN configuration could not be loaded", { error: String(error) });
+    }
+    const relayConfigured = turnServers.length > 0;
     const peer = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.cloudflare.com:3478" },
         { urls: "stun:stun.l.google.com:19302" },
-        ...(turnUrl && turnUsername && turnCredential
-          ? [{ urls: turnUrl, username: turnUsername, credential: turnCredential }]
-          : []),
+        ...turnServers,
       ],
     });
     peer.onicecandidate = ({ candidate }) => {
