@@ -81,29 +81,47 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   useEffect(() => {
     let active = true;
     async function checkAlerts() {
-      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window) || Notification.permission !== "granted") {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        if (active) setAlertsEnabled(false);
+        return;
+      }
+      if (Notification.permission !== "granted") {
         if (active) setAlertsEnabled(false);
         return;
       }
       try {
         const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
-        if (!subscription || !subscriptionUsesCurrentKey(subscription)) {
-          if (active) setAlertsEnabled(false);
-          return;
+        let subscription = await registration.pushManager.getSubscription();
+        if (subscription && !subscriptionUsesCurrentKey(subscription)) {
+          await subscription.unsubscribe();
+          subscription = null;
         }
-        const { data, error } = await supabase.from("twf_push_subscriptions")
-          .select("endpoint")
-          .eq("user_id", userId)
-          .eq("endpoint", subscription.endpoint)
-          .maybeSingle();
-        if (active) setAlertsEnabled(!error && Boolean(data));
+        subscription = subscription || await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: applicationKey(VAPID_PUBLIC_KEY),
+        });
+        const { error } = await supabase.from("twf_push_subscriptions").upsert({
+          user_id: userId,
+          endpoint: subscription.endpoint,
+          subscription: subscription.toJSON(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "endpoint" });
+        if (error) throw error;
+        if (active) setAlertsEnabled(true);
       } catch {
-        if (active) setAlertsEnabled(false);
+        if (active) {
+          setAlertsEnabled(false);
+          setNotice("This browser could not refresh its notification subscription. Check the browser's site permissions, then try again.");
+        }
       }
     }
     void checkAlerts();
-    return () => { active = false; };
+    const refresh = () => { if (document.visibilityState === "visible") void checkAlerts(); };
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [userId]);
 
   async function send(event: FormEvent) {
@@ -168,7 +186,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       setNotice("Call alerts are enabled on this device.");
     } catch {
       setAlertsEnabled(false);
-      setNotice("Call alerts could not be enabled. Try reinstalling Twofold.");
+      setNotice("Notifications could not be enabled in this browser. Allow notifications for Twofold in the browser's site settings, then try again.");
     }
   }
 
