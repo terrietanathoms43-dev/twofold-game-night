@@ -147,6 +147,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   function callLabel(call: CallEvent) {
     const expired = call.status === "pending" && new Date(call.expires_at).getTime() < clock;
     if (expired) return call.caller_id === userId ? "No answer" : "Missed call";
+    if (call.status === "missed") return call.caller_id === userId ? "No answer" : "Missed call";
     if (call.status === "accepted") return "Ongoing call";
     if (call.status === "declined") return call.caller_id === userId ? "Call declined" : "Declined call";
     if (call.status === "ended") return "Call ended";
@@ -209,7 +210,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       <div className="coupleChatComposer">
         {notice && <button className="alertNotice" onClick={() => setNotice("")}>{notice} ×</button>}
         {emojis && <div className="coupleEmojiTray">{EMOJIS.map((emoji) => <button key={emoji} onClick={() => setDraft((value) => value + emoji)}>{emoji}</button>)}</div>}
-        <div className="coupleCallActions"><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "audio" } }))}>☎ Voice call</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "video" } }))}>🎥 Video call</button></div>
+        <div className="coupleCallActions"><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:check-call"))}>✓ Call check</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "audio" } }))}>☎ Voice call</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "video" } }))}>🎥 Video call</button></div>
         <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input value={draft} maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim() || sending}>{sending ? "Sending…" : "Send"}</button></form>
         {alertsEnabled === null
           ? <div className="alertsStatus">Checking notification status…</div>
