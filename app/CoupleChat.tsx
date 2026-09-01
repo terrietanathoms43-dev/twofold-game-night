@@ -191,6 +191,37 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
     }
   }
 
+  async function testAlerts() {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      setNotice("Notifications are not supported by this browser.");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setAlertsEnabled(false);
+      setNotice("Notifications are blocked. Open the browser's site settings for Twofold, change Notifications to Allow, then reload the page.");
+      return;
+    }
+    if (Notification.permission !== "granted") {
+      setAlertsEnabled(false);
+      setNotice("Select Enable alerts first, then allow notifications when the browser asks.");
+      return;
+    }
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.update();
+      await registration.showNotification("Twofold alerts are working", {
+        body: "This laptop can receive Twofold messages and call alerts.",
+        icon: "/twofold-icon-192-v2.png",
+        badge: "/twofold-icon-192-v2.png",
+        tag: "twofold-notification-test",
+        data: { url: "/?openChat=1" },
+      });
+      setNotice("A test alert was sent. If it did not appear, allow notifications for your browser in the laptop's system notification settings.");
+    } catch {
+      setNotice("The laptop could not display a test alert. Check both the browser site permission and the laptop's system notification settings.");
+    }
+  }
+
   const unread = open ? 0 : Math.max(0, messages.length - seen);
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("twofold:chat-unread", { detail: { count: unread } }));
@@ -215,7 +246,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
         {alertsEnabled === null
           ? <div className="alertsStatus">Checking notification status…</div>
           : alertsEnabled
-            ? <div className="alertsStatus enabled">✓ Message &amp; call alerts enabled</div>
+            ? <div className="alertsStatus enabled"><span>✓ Message &amp; call alerts enabled</span><button type="button" onClick={testAlerts}>Send test alert</button></div>
             : <button className="enableAlerts" onClick={enableAlerts}>🔔 Enable message &amp; call alerts</button>}
       </div>
     </aside>}

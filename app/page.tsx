@@ -170,7 +170,11 @@ export default function Home() {
     return () => data.subscription.unsubscribe();
   }, []);
   useEffect(() => {
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
+        .then((registration) => registration.update())
+        .catch((error) => console.error("[twofold-notifications] Service worker registration failed", error));
+    }
   }, []);
   useEffect(() => {
     const update = (event: Event) => setChatUnread(Number((event as CustomEvent<{ count?: number }>).detail?.count || 0));
