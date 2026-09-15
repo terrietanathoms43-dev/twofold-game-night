@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type Message = { id: string; sender_id: string; body: string; created_at: string };
@@ -29,7 +29,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [emojis, setEmojis] = useState(false);
-  const [seen, setSeen] = useState(0);
+  const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [alertsEnabled, setAlertsEnabled] = useState<boolean | null>(null);
   const [sending, setSending] = useState(false);
@@ -37,18 +37,28 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   const [clock, setClock] = useState(() => Date.now());
   const endRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLInputElement | null>(null);
+  const alertCheckComplete = useRef(false);
+  const readStorageKey = `twf-chat-read-${coupleId}-${userId}`;
 
   useEffect(() => {
     let active = true;
     supabase.from("twf_couple_messages").select("id,sender_id,body,created_at")
       .eq("couple_id", coupleId).order("created_at").limit(300)
-      .then(({ data }) => { if (active) { const rows = (data as Message[]) || []; setMessages(rows); setSeen(rows.length); } });
+      .then(({ data }) => {
+        if (!active) return;
+        const rows = (data as Message[]) || [];
+        setMessages(rows);
+        const saved = localStorage.getItem(readStorageKey);
+        const initialReadAt = saved || new Date().toISOString();
+        if (!saved) localStorage.setItem(readStorageKey, initialReadAt);
+        setLastReadAt(initialReadAt);
+      });
     supabase.from("twf_call_invites").select("id,caller_id,mode,status,created_at,expires_at,answered_at,ended_at")
       .eq("couple_id", coupleId).order("created_at").limit(100)
       .then(({ data }) => { if (active) setCalls((data as CallEvent[]) || []); });
     const channel = supabase.channel(`twf-couple-chat:${coupleId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "twf_couple_messages", filter: `couple_id=eq.${coupleId}` }, ({ new: row }) => {
-        setMessages((current) => current.some((item) => item.id === row.id) ? current : [...current, row as Message]);
+        setMessages((current) => current.some((item) => item.id === row.id) ? current : [...current, row as Message].slice(-300));
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "twf_call_invites", filter: `couple_id=eq.${coupleId}` }, ({ new: row }) => {
         const next = row as CallEvent;
@@ -62,20 +72,25 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
     };
     window.addEventListener("twofold:open-chat", show);
     return () => { active = false; window.removeEventListener("twofold:open-chat", show); supabase.removeChannel(channel); };
-  }, [coupleId]);
+  }, [coupleId, readStorageKey]);
 
   useEffect(() => {
-    if (!calls.some((call) => call.status === "accepted" || call.status === "pending")) return;
+    if (!calls.some((call) => call.status === "accepted" || (call.status === "pending" && new Date(call.expires_at).getTime() > Date.now()))) return;
     const timer = window.setInterval(() => setClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [calls]);
 
   useEffect(() => {
     if (!open) return;
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-    const timer = window.setTimeout(() => setSeen(messages.length), 0);
+    endRef.current?.scrollIntoView({ behavior: "auto" });
+    const timer = window.setTimeout(() => {
+      const readAt = new Date().toISOString();
+      localStorage.setItem(readStorageKey, readAt);
+      setLastReadAt(readAt);
+      void navigator.clearAppBadge?.();
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [messages, open]);
+  }, [messages, open, readStorageKey]);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("twofold:chat-open-state", { detail: { open } }));
@@ -87,6 +102,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   useEffect(() => {
     let active = true;
     async function checkAlerts() {
+      if (alertCheckComplete.current) return;
       if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
         if (active) setAlertsEnabled(false);
         return;
@@ -113,7 +129,10 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
           updated_at: new Date().toISOString(),
         }, { onConflict: "endpoint" });
         if (error) throw error;
-        if (active) setAlertsEnabled(true);
+        if (active) {
+          alertCheckComplete.current = true;
+          setAlertsEnabled(true);
+        }
       } catch {
         if (active) {
           setAlertsEnabled(false);
@@ -122,7 +141,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       }
     }
     void checkAlerts();
-    const refresh = () => { if (document.visibilityState === "visible") void checkAlerts(); };
+    const refresh = () => { if (document.visibilityState === "visible" && !alertCheckComplete.current) void checkAlerts(); };
     document.addEventListener("visibilitychange", refresh);
     return () => {
       active = false;
@@ -145,7 +164,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       setNotice("Message could not be sent.");
     } else if (data) {
       setMessages((current) => current.some((item) => item.id === data.id) ? current : [...current, data as Message]);
-      void supabase.functions.invoke("notify-chat", { body: { coupleId } });
+      void supabase.functions.invoke("notify-chat", { body: { coupleId, messageId: data.id } });
     }
     setSending(false);
   }
@@ -168,10 +187,10 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
     return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
   }
 
-  const timeline = [
+  const timeline = useMemo(() => [
     ...messages.map((item) => ({ kind: "message" as const, at: item.created_at, item })),
     ...calls.map((item) => ({ kind: "call" as const, at: item.created_at, item })),
-  ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()), [messages, calls]);
 
   async function enableAlerts() {
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) { setNotice("Push notifications are not supported on this device."); return; }
@@ -228,7 +247,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
     }
   }
 
-  const unread = open ? 0 : Math.max(0, messages.length - seen);
+  const unread = open || !lastReadAt ? 0 : messages.filter((message) => message.sender_id !== userId && message.created_at > lastReadAt).length;
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("twofold:chat-unread", { detail: { count: unread } }));
   }, [unread]);
