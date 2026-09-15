@@ -36,6 +36,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   const [calls, setCalls] = useState<CallEvent[]>([]);
   const [clock, setClock] = useState(() => Date.now());
   const endRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -53,7 +54,12 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
         const next = row as CallEvent;
         setCalls((current) => current.some((item) => item.id === next.id) ? current.map((item) => item.id === next.id ? next : item) : [...current, next]);
       }).subscribe();
-    const show = () => setOpen(true);
+    const show = (event: Event) => {
+      setOpen(true);
+      if ((event as CustomEvent<{ focusComposer?: boolean }>).detail?.focusComposer) {
+        window.setTimeout(() => composerRef.current?.focus(), 100);
+      }
+    };
     window.addEventListener("twofold:open-chat", show);
     return () => { active = false; window.removeEventListener("twofold:open-chat", show); supabase.removeChannel(channel); };
   }, [coupleId]);
@@ -242,7 +248,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
         {notice && <button className="alertNotice" onClick={() => setNotice("")}>{notice} ×</button>}
         {emojis && <div className="coupleEmojiTray">{EMOJIS.map((emoji) => <button key={emoji} onClick={() => setDraft((value) => value + emoji)}>{emoji}</button>)}</div>}
         <div className="coupleCallActions"><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:check-call"))}>✓ Call check</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "audio" } }))}>☎ Voice call</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "video" } }))}>🎥 Video call</button></div>
-        <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input value={draft} maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim() || sending}>{sending ? "Sending…" : "Send"}</button></form>
+        <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input ref={composerRef} value={draft} maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim() || sending}>{sending ? "Sending…" : "Send"}</button></form>
         {alertsEnabled === null
           ? <div className="alertsStatus">Checking notification status…</div>
           : alertsEnabled

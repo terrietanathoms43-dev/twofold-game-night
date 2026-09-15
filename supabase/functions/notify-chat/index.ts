@@ -29,14 +29,16 @@ Deno.serve(async (request) => {
   if (!couple || ![couple.member_one, couple.member_two].includes(user.id)) return json({ error: "Forbidden" }, 403);
   const recipientId = user.id === couple.member_one ? couple.member_two : couple.member_one;
   if (!recipientId) return json({ error: "Partner unavailable" }, 409);
-  const [{ data: profile }, { data: subscriptions, error: subscriptionError }] = await Promise.all([
+  const [{ data: profile }, { data: subscriptions, error: subscriptionError }, { data: latestMessage }] = await Promise.all([
     admin.from("twf_profiles").select("display_name").eq("id", user.id).maybeSingle(),
     admin.from("twf_push_subscriptions").select("endpoint,subscription").eq("user_id", recipientId),
+    admin.from("twf_couple_messages").select("body").eq("couple_id", body.coupleId).eq("sender_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (subscriptionError) return json({ error: "Subscriptions could not be loaded" }, 500);
 
   webpush.setVapidDetails(Deno.env.get("VAPID_SUBJECT") || "mailto:support@twofold.app", vapidPublicKey, vapidPrivateKey);
-  const payload = { type: "chat", title: `New message from ${profile?.display_name || "your partner"}`, body: "Open Twofold to read it.", tag: `twofold-chat-${body.coupleId}`, url: "/?openChat=1" };
+  const messagePreview = String(latestMessage?.body || "Your partner sent a message.").slice(0, 240);
+  const payload = { type: "chat", title: `New message from ${profile?.display_name || "your partner"}`, body: messagePreview, tag: `twofold-chat-${body.coupleId}`, url: "/?openChat=1" };
   let sent = 0;
   let failed = 0;
   for (const row of subscriptions || []) {

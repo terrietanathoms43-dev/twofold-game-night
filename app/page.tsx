@@ -207,7 +207,8 @@ export default function Home() {
   }, [preferenceCoupleId]);
   useEffect(() => {
     if (!preferenceCoupleId || new URLSearchParams(window.location.search).get("openChat") !== "1") return;
-    window.dispatchEvent(new Event("twofold:open-chat"));
+    const focusComposer = new URLSearchParams(window.location.search).get("reply") === "1";
+    window.dispatchEvent(new CustomEvent("twofold:open-chat", { detail: { focusComposer } }));
     window.history.replaceState({}, "", window.location.pathname);
   }, [preferenceCoupleId]);
   useEffect(() => {
