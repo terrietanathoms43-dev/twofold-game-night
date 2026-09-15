@@ -31,6 +31,16 @@ test("notification functions handle browser preflight without committing private
   }
 });
 
+test("message notifications support replies and unread app badges", async () => {
+  const worker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+  const chat = await readFile(new URL("../app/CoupleChat.tsx", import.meta.url), "utf8");
+  assert.match(worker, /action:"reply"/);
+  assert.match(worker, /self\.navigator\.setAppBadge/);
+  assert.match(worker, /self\.navigator\.clearAppBadge/);
+  assert.match(chat, /message\.sender_id !== userId/);
+  assert.match(chat, /twofold:chat-unread/);
+});
+
 test("cloud preferences and personal export remain protected by RLS and authentication", async () => {
   const source = await readFile(new URL("../supabase/migrations/202608230001_cloud_preferences_and_export.sql", import.meta.url), "utf8");
   assert.match(source, /enable row level security/i);
