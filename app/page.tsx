@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import Image from "next/image";
@@ -31,6 +31,11 @@ type Night = {
   winner_id: string | null;
   play_style?: "competitive" | "cooperative";
   difficulty?: "easy" | "standard" | "hard";
+  session_minutes?: number;
+  session_ends_at?: string | null;
+  current_game_ends_at?: string | null;
+  extension_minutes?: number;
+  number_digits?: number;
 };
 type Round = {
   id: string;
@@ -153,12 +158,22 @@ export default function Home() {
     [savedLineups, setSavedLineups] = useState<string[][]>([]),
     [playStyle, setPlayStyle] = useState<"competitive" | "cooperative">("competitive"),
     [difficulty, setDifficulty] = useState<"easy" | "standard" | "hard">("standard"),
+    [sessionMinutes, setSessionMinutes] = useState(45),
+    [sessionLeft, setSessionLeft] = useState<number | null>(null),
+    [gameTimeLeft, setGameTimeLeft] = useState<number | null>(null),
+    [numberDigits, setNumberDigits] = useState(3),
+    [numberSecret, setNumberSecret] = useState(""),
+    [numberGuess, setNumberGuess] = useState(""),
+    [numberGuesses, setNumberGuesses] = useState<any[]>([]),
+    [ownNumberSecret, setOwnNumberSecret] = useState<number | null>(null),
     [online, setOnline] = useState(true),
     [chatUnread, setChatUnread] = useState(0),
     [copied, setCopied] = useState(false),
     [photoViewerOpen, setPhotoViewerOpen] = useState(false),
     [msg, setMsg] = useState(""),
     [busy, setBusy] = useState(false);
+  const sessionFinishRequested = useRef(false);
+  const gameFinishRequested = useRef(false);
   const gameCategories = ["Couple", "Competitive", "Party", "Creative", "Cooperative"];
   const preferenceCoupleId = couple?.id;
   useEffect(() => {
@@ -170,7 +185,11 @@ export default function Home() {
     return () => data.subscription.unsubscribe();
   }, []);
   useEffect(() => {
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
+        .then((registration) => registration.update())
+        .catch((error) => console.error("[twofold-notifications] Service worker registration failed", error));
+    }
   }, []);
   useEffect(() => {
     const update = (event: Event) => setChatUnread(Number((event as CustomEvent<{ count?: number }>).detail?.count || 0));
@@ -203,7 +222,8 @@ export default function Home() {
   }, [preferenceCoupleId]);
   useEffect(() => {
     if (!preferenceCoupleId || new URLSearchParams(window.location.search).get("openChat") !== "1") return;
-    window.dispatchEvent(new Event("twofold:open-chat"));
+    const focusComposer = new URLSearchParams(window.location.search).get("reply") === "1";
+    window.dispatchEvent(new CustomEvent("twofold:open-chat", { detail: { focusComposer } }));
     window.history.replaceState({}, "", window.location.pathname);
   }, [preferenceCoupleId]);
   useEffect(() => {
@@ -259,25 +279,59 @@ export default function Home() {
         { event: "*", schema: "public", table: "twf_creative_ratings" },
         refresh,
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "twf_number_guesses" },
+        refresh,
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
     };
   }, [night?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- one subscription per active room
   useEffect(() => {
-    if (!night || view !== "lobby") return;
-    const reconcileLobby = () => void loadPlayers(night.id);
-    reconcileLobby();
+    if (!night || view !== "lobby" || !profile) return;
+    let active = true;
+    let reconciling = false;
+    const reconcileLobby = async () => {
+      if (reconciling) return;
+      reconciling = true;
+      try {
+        let currentPlayers = await loadPlayers(night.id);
+        if (!active) return;
+
+        // A room can be opened from the invite code, a notification, or Resume.
+        // Every lobby entry must perform the same idempotent ready handshake.
+        const currentPlayer = currentPlayers.find(
+          (player) => player.user_id === profile.id,
+        );
+        if (!currentPlayer?.ready) {
+          const { error } = await supabase.rpc("twf_join_game_night", {
+            p_game_night_id: night.id,
+          });
+          if (!active) return;
+          if (error) {
+            setMsg(`Could not mark you ready: ${error.message}`);
+            return;
+          }
+          currentPlayers = await loadPlayers(night.id);
+        }
+      } finally {
+        reconciling = false;
+      }
+    };
+    void reconcileLobby();
     const timer = window.setInterval(reconcileLobby, 2500);
     const refreshVisible = () => {
-      if (document.visibilityState === "visible") reconcileLobby();
+      if (document.visibilityState === "visible") void reconcileLobby();
     };
     document.addEventListener("visibilitychange", refreshVisible);
     return () => {
+      active = false;
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refreshVisible);
     };
-  }, [night?.id, view]); // eslint-disable-line react-hooks/exhaustive-deps -- lobby-only recovery when a realtime event is missed
+  }, [night?.id, view, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- lobby-only ready handshake and recovery
   useEffect(() => {
     if (!couple || !profile) return;
     const refreshQuestions = async () => {
@@ -329,6 +383,63 @@ export default function Home() {
       if (timer) window.clearInterval(timer);
     };
   }, [activeRound?.ends_at]);
+  useEffect(() => {
+    const tick = () => {
+      if (!night?.session_ends_at || night.status !== "playing") {
+        setSessionLeft(null);
+        return;
+      }
+      setSessionLeft(Math.max(0, Math.ceil((new Date(night.session_ends_at).getTime() - Date.now()) / 1000)));
+    };
+    tick();
+    const timer = night?.session_ends_at && night.status === "playing" ? window.setInterval(tick, 1000) : null;
+    return () => { if (timer) window.clearInterval(timer); };
+  }, [night?.session_ends_at, night?.status]);
+  useEffect(() => {
+    const tick = () => {
+      if (!night?.current_game_ends_at || night.status !== "playing") {
+        setGameTimeLeft(null);
+        return;
+      }
+      setGameTimeLeft(Math.max(0, Math.ceil((new Date(night.current_game_ends_at).getTime() - Date.now()) / 1000)));
+    };
+    tick();
+    const timer = night?.current_game_ends_at && night.status === "playing" ? window.setInterval(tick, 1000) : null;
+    return () => { if (timer) window.clearInterval(timer); };
+  }, [night?.current_game_ends_at, night?.status]);
+  useEffect(() => {
+    if (sessionLeft !== 0 || !night || night.status !== "playing" || night.created_by !== profile?.id || sessionFinishRequested.current) return;
+    sessionFinishRequested.current = true;
+    void (async () => {
+      try {
+        const { error } = await supabase.rpc("twf_finish_timed_game_night", { p_game_night_id: night.id });
+        if (error) setMsg(error.message);
+        else await loadGameState(night.id);
+      } finally {
+        sessionFinishRequested.current = false;
+      }
+    })();
+  }, [sessionLeft, night?.id, night?.status, night?.created_by, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- host closes an expired shared session once
+  useEffect(() => {
+    if (gameTimeLeft !== 0 || sessionLeft === 0 || !night || night.status !== "playing" || night.created_by !== profile?.id || gameFinishRequested.current) return;
+    gameFinishRequested.current = true;
+    void (async () => {
+      try {
+        const nextGame = GAMES.find((item) => item.key === selected[gi + 1]);
+        const nextPrompt = nextGame ? await pickFreshPrompt(nextGame.key, 0) : "";
+        if (nextGame && !nextPrompt) return;
+        const { error } = await supabase.rpc("twf_expire_current_game", {
+          p_game_night_id: night.id,
+          p_next_prompt: nextPrompt,
+          p_next_timed: nextGame?.mode === "speed",
+        });
+        if (error) setMsg(error.message);
+        else await loadGameState(night.id);
+      } finally {
+        gameFinishRequested.current = false;
+      }
+    })();
+  }, [gameTimeLeft, sessionLeft, night?.id, night?.status, night?.created_by, profile?.id, gi, selected]); // eslint-disable-line react-hooks/exhaustive-deps -- host advances an expired game once
   async function signedProfile(person: Profile | null) {
     if (!person?.avatar_url) return person;
     const { data } = await supabase.storage
@@ -582,6 +693,8 @@ export default function Home() {
       p_game_keys: selected,
       p_play_style: playStyle,
       p_difficulty: difficulty,
+      p_session_minutes: sessionMinutes,
+      p_number_digits: numberDigits,
     });
     if (error) {
       setMsg(error.message);
@@ -704,11 +817,17 @@ export default function Home() {
     window.setTimeout(() => setCopied(false), 1800);
   }
   async function loadPlayers(id: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("twf_game_night_players")
       .select("*")
       .eq("game_night_id", id);
-    setPlayers(data || []);
+    if (error) {
+      setMsg(`Could not refresh the lobby: ${error.message}`);
+      return [];
+    }
+    const nextPlayers = data || [];
+    setPlayers(nextPlayers);
+    return nextPlayers;
   }
   function getPromptPool(gameKey: string) {
     const definition = GAMES.find((g) => g.key === gameKey) || GAMES[0],
@@ -787,6 +906,17 @@ export default function Home() {
         ]);
         setAnswers(a || []);
         setRatings(rt || []);
+        if (current.game_key === "higherLower") {
+          const [{ data: secret }, { data: guesses }] = await Promise.all([
+            supabase.from("twf_number_secrets").select("secret_number").eq("round_id", r.id).maybeSingle(),
+            supabase.from("twf_number_guesses").select("*").eq("round_id", r.id).order("created_at"),
+          ]);
+          setOwnNumberSecret(secret?.secret_number ?? null);
+          setNumberGuesses(guesses || []);
+        } else {
+          setOwnNumberSecret(null);
+          setNumberGuesses([]);
+        }
       } else {
         setAnswers([]);
         setRatings([]);
@@ -829,9 +959,60 @@ export default function Home() {
     }
     setBusy(false);
   }
+  async function setSecretNumber() {
+    if (!activeRound || !numberSecret.trim()) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("twf_set_number_secret", {
+      p_round_id: activeRound.id,
+      p_secret: Number(numberSecret),
+    });
+    if (error) setMsg(error.message);
+    else { setNumberSecret(""); await loadGameState(night!.id); }
+    setBusy(false);
+  }
+  async function submitNumberGuess() {
+    if (!activeRound || !numberGuess.trim()) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("twf_make_number_guess", {
+      p_round_id: activeRound.id,
+      p_guess: Number(numberGuess),
+    });
+    if (error) setMsg(error.message);
+    else { setNumberGuess(""); await loadGameState(night!.id); }
+    setBusy(false);
+  }
+  async function giveNumberFeedback(feedback: "higher" | "lower" | "correct") {
+    const pending = numberGuesses.find((item) => !item.feedback);
+    if (!pending || !activeRound) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("twf_respond_number_guess", {
+      p_guess_id: pending.id,
+      p_feedback: feedback,
+    });
+    if (error) setMsg(error.message);
+    else await loadGameState(night!.id);
+    setBusy(false);
+  }
+  async function extendNight(minutes: number) {
+    if (!night) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("twf_extend_game_night", { p_game_night_id: night.id, p_minutes: minutes });
+    if (error) setMsg(error.message);
+    else { setMsg(`Game night extended by ${minutes} minutes.`); await loadGameState(night.id); }
+    setBusy(false);
+  }
+  async function extendCurrentGame(minutes: number) {
+    if (!night) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("twf_extend_current_game", { p_game_night_id: night.id, p_minutes: minutes });
+    if (error) setMsg(error.message);
+    else { setMsg(`${game.title} extended by ${minutes} minutes.`); await loadGameState(night.id); }
+    setBusy(false);
+  }
   async function advance() {
-    const nextGi = round < 2 ? gi : gi + 1,
-      nextRound = round < 2 ? round + 1 : 0,
+    const finalRound = game.key === "higherLower" ? 1 : 2,
+      nextGi = round < finalRound ? gi : gi + 1,
+      nextRound = round < finalRound ? round + 1 : 0,
       nextGame = GAMES.find((g) => g.key === selected[nextGi]);
     setBusy(true);
     const nextPrompt = nextGame ? await pickFreshPrompt(nextGame.key, nextRound) : "";
@@ -941,6 +1122,13 @@ export default function Home() {
     turnActor = round % 2 === 0 ? couple.member_one : couple.member_two,
     isActor = turnActor === profile.id,
     roleGame = ["charades", "dontsay", "describe", "secretSignal", "voiceImpression"].includes(game.key),
+    numberSetter = round % 2 === 0 ? couple.member_one : couple.member_two,
+    isNumberSetter = numberSetter === profile.id,
+    numberReady = activeRound?.state?.number_secret_ready === "true",
+    pendingNumberGuess = numberGuesses.find((item) => !item.feedback),
+    maxNumber = Math.pow(10, night?.number_digits || numberDigits) - 1,
+    minNumber = (night?.number_digits || numberDigits) === 1 ? 0 : Math.pow(10, (night?.number_digits || numberDigits) - 1),
+    lastRound = game.key === "higherLower" ? 1 : 2,
     creativeNeedsRating = ["draw", "caption", "story"].includes(game.key),
     myRating = ratings.find((item) => item.voter_id === profile.id)?.rating,
     displayPrompt =
@@ -1350,6 +1538,20 @@ export default function Home() {
                   <option value="hard">Hard</option>
                 </select>
               </label>
+              <label>
+                <span>Session length</span>
+                <select value={sessionMinutes} onChange={(event) => setSessionMinutes(Number(event.target.value))}>
+                  {[15, 30, 45, 60, 90, 120].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}
+                </select>
+              </label>
+              {selected.includes("higherLower") && (
+                <label>
+                  <span>Higher or Lower digits</span>
+                  <select value={numberDigits} onChange={(event) => setNumberDigits(Number(event.target.value))}>
+                    {[1, 2, 3, 4, 5, 6].map((digits) => <option key={digits} value={digits}>{digits} digit{digits === 1 ? "" : "s"}</option>)}
+                  </select>
+                </label>
+              )}
             </section>
             {savedLineups.length > 0 && (
               <div className="savedLineups">
@@ -1481,6 +1683,7 @@ export default function Home() {
             <small>PRIVATE GAME NIGHT</small>
             <h1>Your room is ready</h1>
             <p>Both devices update automatically.</p>
+            <p className="sessionSummary">⏱ {night.session_minutes || sessionMinutes} minute session{selected.includes("higherLower") ? ` · ${night.number_digits || numberDigits}-digit Higher or Lower` : ""}</p>
             <div className="code">
               <b>{night.room_code}</b>
               <button onClick={copyRoomCode}>
@@ -1563,7 +1766,8 @@ export default function Home() {
                 <b>{game.title}</b>
               </div>
               <span>
-                {timeLeft !== null && <>⏱ {timeLeft}s · </>}Score{" "}
+                {sessionLeft !== null && <>Night {Math.floor(sessionLeft / 60)}:{String(sessionLeft % 60).padStart(2, "0")} · </>}
+                {timeLeft !== null && <>Round {timeLeft}s · </>}Score{" "}
                 <b>{myScore}</b>
               </span>
             </div>
@@ -1571,10 +1775,25 @@ export default function Home() {
               <i
                 style={{
                   width:
-                    ((gi * 3 + round + 1) / (selected.length * 3)) * 100 + "%",
+                    ((gi * 3 + Math.min(round, 2) + 1) / (selected.length * 3)) * 100 + "%",
                 }}
               />
             </div>
+            <section className="timeControls" aria-label="Game-night timers">
+              <div><small>THIS GAME</small><b>{gameTimeLeft === null ? "—" : `${Math.floor(gameTimeLeft / 60)}:${String(gameTimeLeft % 60).padStart(2, "0")}`}</b></div>
+              <div><small>WHOLE NIGHT</small><b>{sessionLeft === null ? "—" : `${Math.floor(sessionLeft / 60)}:${String(sessionLeft % 60).padStart(2, "0")}`}</b></div>
+              <details>
+                <summary>＋ Extend time</summary>
+                <div>
+                  <span>Current game</span>
+                  <button disabled={busy} onClick={() => extendCurrentGame(2)}>+2 min</button>
+                  <button disabled={busy} onClick={() => extendCurrentGame(5)}>+5 min</button>
+                  <span>Whole night</span>
+                  <button disabled={busy} onClick={() => extendNight(10)}>+10 min</button>
+                  <button disabled={busy} onClick={() => extendNight(15)}>+15 min</button>
+                </div>
+              </details>
+            </section>
             <section className="question">
               <small>
                 ROUND {round + 1} · {game.category.toUpperCase()}
@@ -1586,8 +1805,8 @@ export default function Home() {
                 <p>{game.instructions}</p>
                 <small>{game.mode === "speed" ? "Correct answers score 100 points, with a 25-point first-answer bonus." : "Lock answers privately. Both answers reveal only after the round closes."}</small>
               </details>
-              <button className="reportQuestion" onClick={reportQuestion}>Report a problem with this question</button>
-              {!roundRevealed && !iAnswered && !partnerAnswered && (
+              {game.key !== "higherLower" && <button className="reportQuestion" onClick={reportQuestion}>Report a problem with this question</button>}
+              {game.key !== "higherLower" && !roundRevealed && !iAnswered && !partnerAnswered && (
                 <div className="skipQuestion">
                   {skipStatus === "requested" ? (
                     iRequestedSkip ? (
@@ -1618,7 +1837,39 @@ export default function Home() {
                   <small>Secret until both answers are locked</small>
                 </div>
               )}
-              {game.key === "draw" ? (
+              {game.key === "higherLower" ? (
+                <div className="numberGame">
+                  <div className="numberRole">
+                    <b>{isNumberSetter ? "You set the secret number" : `${partner?.display_name || "Your partner"} set the secret number`}</b>
+                    <span>Range: {minNumber.toLocaleString()}–{maxNumber.toLocaleString()}</span>
+                  </div>
+                  {!numberReady && isNumberSetter && (
+                    <div className="numberEntry">
+                      <input type="number" inputMode="numeric" min={minNumber} max={maxNumber} value={numberSecret} onChange={(event) => setNumberSecret(event.target.value)} placeholder={`Enter a ${night?.number_digits || numberDigits}-digit number`} />
+                      <button className="primary" disabled={busy || Number(numberSecret) < minNumber || Number(numberSecret) > maxNumber} onClick={setSecretNumber}>Lock secret number</button>
+                    </div>
+                  )}
+                  {!numberReady && !isNumberSetter && <p>Waiting for your partner to lock their secret number…</p>}
+                  {numberReady && !roundRevealed && !isNumberSetter && !pendingNumberGuess && (
+                    <div className="numberEntry">
+                      <input type="number" inputMode="numeric" min={minNumber} max={maxNumber} value={numberGuess} onChange={(event) => setNumberGuess(event.target.value)} placeholder="Enter your guess" />
+                      <button className="primary" disabled={busy || Number(numberGuess) < minNumber || Number(numberGuess) > maxNumber} onClick={submitNumberGuess}>Send guess</button>
+                    </div>
+                  )}
+                  {numberReady && !roundRevealed && isNumberSetter && !pendingNumberGuess && <p>Your secret is locked. Waiting for your partner’s guess…</p>}
+                  {pendingNumberGuess && isNumberSetter && (
+                    <div className="numberFeedback">
+                      <p>Your partner guessed <b>{pendingNumberGuess.guess}</b>. What should they try?</p>
+                      <button disabled={busy} onClick={() => giveNumberFeedback("lower")}>↓ Guess lower</button>
+                      <button disabled={busy} onClick={() => giveNumberFeedback("correct")}>✓ Correct</button>
+                      <button disabled={busy} onClick={() => giveNumberFeedback("higher")}>↑ Guess higher</button>
+                    </div>
+                  )}
+                  {pendingNumberGuess && !isNumberSetter && <p>Guess sent. Waiting for higher, lower, or correct…</p>}
+                  {numberGuesses.length > 0 && <ol className="guessHistory">{[...numberGuesses].reverse().map((item) => <li key={item.id}><b>{item.guess}</b><span>{item.feedback ? item.feedback === "correct" ? "✓ Correct" : item.feedback === "higher" ? "↑ Go higher" : "↓ Go lower" : "Waiting…"}</span></li>)}</ol>}
+                  {roundRevealed && <p className="numberSolved">Found it! The secret number was <b>{ownNumberSecret ?? numberGuesses.find((item) => item.feedback === "correct")?.guess}</b>.</p>}
+                </div>
+              ) : game.key === "draw" ? (
                 <DrawingPad
                   disabled={iAnswered}
                   value={answer}
@@ -1712,7 +1963,7 @@ export default function Home() {
                   maxLength={500}
                 />
               )}
-              <button
+              {game.key !== "higherLower" && <button
                 className="primary"
                 disabled={
                   !answer.trim() ||
@@ -1723,14 +1974,14 @@ export default function Home() {
                 onClick={submit}
               >
                 {iAnswered ? "Answer locked" : "Lock in answer"}
-              </button>
-              <p className="answerStatus">
+              </button>}
+              {game.key !== "higherLower" && <p className="answerStatus">
                 {iAnswered ? "✓ Your answer is locked" : "Waiting for you"} ·{" "}
                 {roundRevealed
                   ? "Both answers revealed"
                   : "Partner’s answer is hidden"}
-              </p>
-              {roundRevealed && (
+              </p>}
+              {game.key !== "higherLower" && roundRevealed && (
                 <div className="roundReveal">
                   <h3>Round scores</h3>
                   {answers.map((a) => (
@@ -1768,7 +2019,7 @@ export default function Home() {
                   }
                   onClick={advance}
                 >
-                  {round < 2
+                  {round < lastRound
                     ? "Next round"
                     : gi < selected.length - 1
                       ? "Next game"
