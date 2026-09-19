@@ -28,6 +28,13 @@ type CallOffer = {
   expiresAt?: string;
 };
 
+type ConnectionCheck = {
+  online: boolean;
+  realtime: boolean;
+  media: boolean;
+  relay: boolean;
+};
+
 const CHAT_EMOJIS = ["♡", "😂", "🥰", "😊", "😭", "🎉", "🔥", "👏", "✨", "🎮", "🏆", "💭"];
 const STICKERS = [
   { key: "love", icon: "💗", label: "Sending love" },
@@ -61,6 +68,8 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
   const [globalChatOpen, setGlobalChatOpen] = useState(false);
   const [speakerActive, setSpeakerActive] = useState(false);
   const [callPosition, setCallPosition] = useState<{ x: number; y: number } | null>(null);
+  const [connectionCheck, setConnectionCheck] = useState<ConnectionCheck | null>(null);
+  const [checkingConnection, setCheckingConnection] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const endCallRef = useRef<(notify?: boolean) => void>(() => undefined);
   const peerRef = useRef<RTCPeerConnection | null>(null);
@@ -97,6 +106,12 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
   }, [callMode, channelReady]); // eslint-disable-line react-hooks/exhaustive-deps -- starts only from an explicit call button
 
   useEffect(() => {
+    const check = () => void runConnectionCheck();
+    window.addEventListener("twofold:check-call", check);
+    return () => window.removeEventListener("twofold:check-call", check);
+  });
+
+  useEffect(() => {
     let active = true;
     if (nightId) supabase
       .from("twf_room_messages")
@@ -109,6 +124,11 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
       .eq("couple_id", coupleId).eq("recipient_id", userId).eq("status", "pending")
       .gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle()
       .then(({ data }) => { if (active && data) { activeInviteRef.current = data.id; setIncoming({ inviteId: data.id, sender: data.caller_id, mode: data.mode, description: data.description, expiresAt: data.expires_at } as CallOffer); } });
+    void supabase.from("twf_call_invites")
+      .update({ status: "missed" })
+      .eq("couple_id", coupleId)
+      .eq("status", "pending")
+      .lte("expires_at", new Date().toISOString());
 
     void supabase.realtime.setAuth();
     const channel = supabase
@@ -197,11 +217,12 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
     if (!incoming?.expiresAt || callMode) return;
     const remaining = new Date(incoming.expiresAt).getTime() - Date.now();
     const timer = window.setTimeout(() => {
+      if (incoming.inviteId) void supabase.from("twf_call_invites").update({ status: "missed" }).eq("id", incoming.inviteId).eq("status", "pending");
       activeInviteRef.current = null;
       setIncoming(null);
     }, Math.max(0, remaining));
     return () => window.clearTimeout(timer);
-  }, [incoming?.expiresAt, callMode]);
+  }, [incoming?.expiresAt, incoming?.inviteId, callMode]);
 
   useEffect(() => {
     if (!callMode) return;
@@ -230,6 +251,34 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
       p_route: window.location.pathname,
       p_context: { nightId: nightId || null, ...context },
     });
+  }
+
+  async function runConnectionCheck() {
+    if (checkingConnection) return;
+    setCheckingConnection(true);
+    let relay = false;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch("/api/turn", {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const body = await response.json() as { iceServers?: RTCIceServer[] };
+        relay = Boolean(body.iceServers?.length);
+      }
+    } catch {
+      relay = false;
+    }
+    const result = {
+      online: navigator.onLine,
+      realtime: channelReady,
+      media: Boolean(navigator.mediaDevices?.getUserMedia),
+      relay,
+    };
+    setConnectionCheck(result);
+    setCheckingConnection(false);
+    window.dispatchEvent(new CustomEvent("twofold:call-check-result", { detail: result }));
   }
 
   async function showIncomingNotification(mode: "audio" | "video") {
@@ -525,6 +574,16 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
         </div>
       )}
 
+      {connectionCheck && !callMode && (
+        <div className="connectionCheck" role="status" aria-live="polite">
+          <div><b>Call connection check</b><button onClick={() => setConnectionCheck(null)} aria-label="Close connection check">×</button></div>
+          <span className={connectionCheck.online ? "ready" : "blocked"}>{connectionCheck.online ? "✓ Internet connection" : "! Device is offline"}</span>
+          <span className={connectionCheck.realtime ? "ready" : "blocked"}>{connectionCheck.realtime ? "✓ Live call service" : "! Live service is reconnecting"}</span>
+          <span className={connectionCheck.media ? "ready" : "blocked"}>{connectionCheck.media ? "✓ Camera and microphone supported" : "! Camera or microphone unavailable"}</span>
+          <span className={connectionCheck.relay ? "ready" : "warning"}>{connectionCheck.relay ? "✓ Relay backup configured" : "Direct calls only — some networks may block calls"}</span>
+        </div>
+      )}
+
       {callMode && (
         <div
           className={"callStage " + callMode + (callMinimized ? " minimized" : "")}
@@ -603,6 +662,7 @@ export default function RoomCommunication({ nightId, coupleId, userId, partnerId
         </button>}
         {!callMode && (
           <>
+          <button disabled={checkingConnection} onClick={runConnectionCheck}>{checkingConnection ? "Checking…" : "Call check"}</button>
           <button disabled={!channelReady} onClick={() => startCall("audio")}>
             Voice
           </button>
