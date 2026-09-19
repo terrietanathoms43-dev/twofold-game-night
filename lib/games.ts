@@ -1,4 +1,4 @@
-export type GameMode="match"|"choice"|"text"|"speed"|"creative";
+export type GameMode="match"|"choice"|"text"|"speed"|"creative"|"number";
 export type GameDef={key:string;title:string;icon:string;category:string;mode:GameMode;instructions:string;prompts:string[]};
 export const GAMES:GameDef[]=[
 {key:"knows",title:"Who Knows Me Better?",icon:"♡",category:"Couple",mode:"match",instructions:"Answer about yourself, then your partner predicts it.",prompts:["My perfect day includes…","My favourite way to relax is…","The snack I can never refuse is…"]},
@@ -37,6 +37,7 @@ export const GAMES:GameDef[]=[
 ,{key:"scavenger",title:"Scavenger Sprint",icon:"⌕",category:"Party",mode:"speed",instructions:"Find a safe household object matching the clue before time expires.",prompts:["Find something soft","Find something beginning with B","Find something smaller than your hand"]}
 ,{key:"playlistMatch",title:"Playlist Match",icon:"♫",category:"Couple",mode:"match",instructions:"Enter a song title you associate with the given safe mood or memory and compare.",prompts:["A song title for a happy memory","A song title for a road trip","A song title for celebrating good news"]}
 ,{key:"appreciation",title:"Appreciation Challenge",icon:"❀",category:"Cooperative",mode:"text",instructions:"Answer thoughtful prompts to grow a shared team score.",prompts:["Name something your partner handled well recently.","What quality makes you work well as a team?","Name a small gesture you appreciate."]}
+,{key:"higherLower",title:"Higher or Lower",icon:"↕",category:"Competitive",mode:"number",instructions:"Set a secret number, then guide your partner higher or lower until they find it. You swap roles for round two.",prompts:["Choose a secret number for your partner to find."]}
 ];
 
 const MORE_PROMPTS:Record<string,string[]>={
