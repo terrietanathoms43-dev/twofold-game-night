@@ -81,3 +81,30 @@ test("every lobby entry marks the current player ready before waiting for the pa
   assert.match(page, /supabase\.rpc\("twf_join_game_night"/);
   assert.match(page, /Could not mark you ready/);
 });
+
+test("active gameplay reconciles automatically and ignores stale state responses", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /window\.setInterval\(reconcileGame, 1500\)/);
+  assert.match(page, /gameStateLoadId\.current/);
+  assert.match(page, /loadId !== gameStateLoadId\.current/);
+  assert.match(page, /Your answer was not locked:/);
+});
+
+test("alternating-role games give both players equal turns", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../supabase/migrations/20260919015644_custom_games_and_live_sync.sql", import.meta.url), "utf8");
+  assert.match(page, /BALANCED_TURN_GAMES/);
+  assert.match(page, /BALANCED_TURN_GAMES\.has\(gameKey\) \? 3/);
+  assert.match(migration, /game_key in \('knows','charades','dontsay','describe','secretSignal','voiceImpression'\) then 3/i);
+});
+
+test("custom couple games are private, validated, live, and selectable", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../supabase/migrations/20260919015644_custom_games_and_live_sync.sql", import.meta.url), "utf8");
+  assert.match(page, /function CustomGameManager/);
+  assert.match(page, /key: `custom:\$\{item\.id\}`/);
+  assert.match(migration, /alter table public\.twf_custom_games enable row level security/i);
+  assert.match(migration, /private\.twf_valid_custom_prompts\(prompts\)/i);
+  assert.match(migration, /alter publication supabase_realtime add table public\.twf_custom_games/i);
+  assert.match(migration, /cg\.couple_id = v_couple\.id/i);
+});

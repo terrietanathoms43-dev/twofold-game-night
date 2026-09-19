@@ -4,7 +4,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import Image from "next/image";
 import { supabase } from "../lib/supabase";
-import { GAMES } from "../lib/games";
+import { GAMES, type GameDef } from "../lib/games";
 import RoomCommunication from "./RoomCommunication";
 import CoupleChat from "./CoupleChat";
 type Profile = {
@@ -46,6 +46,15 @@ type Round = {
   ends_at: string | null;
   state?: Record<string, string>;
 };
+type CustomGame = {
+  id: string;
+  couple_id: string;
+  created_by: string;
+  title: string;
+  instructions: string;
+  category: string;
+  prompts: string[];
+};
 type View =
   | "home"
   | "games"
@@ -58,6 +67,8 @@ type View =
   | "profile";
 const init = (s?: string) => s?.trim().slice(0, 1).toUpperCase() || "?";
 const MAX_PROFILE_PHOTO_BYTES = 10 * 1024 * 1024;
+const BALANCED_TURN_GAMES = new Set(["knows", "charades", "dontsay", "describe", "secretSignal", "voiceImpression"]);
+const lastRoundForGame = (gameKey: string) => gameKey === "higherLower" ? 1 : BALANCED_TURN_GAMES.has(gameKey) ? 3 : 2;
 const AVATARS = [
   {
     key: "heart",
@@ -150,6 +161,7 @@ export default function Home() {
     [answer, setAnswer] = useState(""),
     [answers, setAnswers] = useState<any[]>([]),
     [customQuestions, setCustomQuestions] = useState<any[]>([]),
+    [customGames, setCustomGames] = useState<CustomGame[]>([]),
     [history, setHistory] = useState<any[]>([]),
     [historyPlayers, setHistoryPlayers] = useState<any[]>([]),
     [gameResults, setGameResults] = useState<any[]>([]),
@@ -174,8 +186,22 @@ export default function Home() {
     [busy, setBusy] = useState(false);
   const sessionFinishRequested = useRef(false);
   const gameFinishRequested = useRef(false);
+  const gameStateLoadId = useRef(0);
+  const loadedRoundId = useRef<string | null>(null);
   const gameCategories = ["Couple", "Competitive", "Party", "Creative", "Cooperative"];
   const preferenceCoupleId = couple?.id;
+  const gameCatalog: GameDef[] = [
+    ...GAMES,
+    ...customGames.map((item) => ({
+      key: `custom:${item.id}`,
+      title: item.title,
+      icon: "★",
+      category: item.category,
+      mode: "text" as const,
+      instructions: item.instructions,
+      prompts: item.prompts,
+    })),
+  ];
   useEffect(() => {
     supabase.auth.getSession().then((x) => {
       setSession(x.data.session);
@@ -348,6 +374,19 @@ export default function Home() {
     };
   }, [night?.id, view, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- lobby-only ready handshake and recovery
   useEffect(() => {
+    if (!night || view !== "play") return;
+    const reconcileGame = () => void loadGameState(night.id);
+    const timer = window.setInterval(reconcileGame, 1500);
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") reconcileGame();
+    };
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [night?.id, view]); // eslint-disable-line react-hooks/exhaustive-deps -- recovery when realtime events are delayed or missed
+  useEffect(() => {
     if (!couple || !profile) return;
     const refreshQuestions = async () => {
       const { data } = await supabase
@@ -357,12 +396,25 @@ export default function Home() {
         .order("created_at", { ascending: false });
       setCustomQuestions(data || []);
     };
+    const refreshCustomGames = async () => {
+      const { data } = await supabase
+        .from("twf_custom_games")
+        .select("id,couple_id,created_by,title,instructions,category,prompts")
+        .eq("couple_id", couple.id)
+        .order("created_at", { ascending: false });
+      setCustomGames(data || []);
+    };
     const channel = supabase
       .channel("twf-couple-live-" + couple.id)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "twf_custom_questions", filter: "couple_id=eq." + couple.id },
         refreshQuestions,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "twf_custom_games", filter: "couple_id=eq." + couple.id },
+        refreshCustomGames,
       )
       .on(
         "postgres_changes",
@@ -440,7 +492,7 @@ export default function Home() {
     gameFinishRequested.current = true;
     void (async () => {
       try {
-        const nextGame = GAMES.find((item) => item.key === selected[gi + 1]);
+        const nextGame = gameCatalog.find((item) => item.key === selected[gi + 1]);
         const nextPrompt = nextGame ? await pickFreshPrompt(nextGame.key, 0) : "";
         if (nextGame && !nextPrompt) return;
         const { error } = await supabase.rpc("twf_expire_current_game", {
@@ -490,7 +542,7 @@ export default function Home() {
             .single();
           setPartner(await signedProfile(pp));
         }
-        const [{ data: h }, { data: q }, { data: active }] = await Promise.all([
+        const [{ data: h }, { data: q }, { data: cg }, { data: active }] = await Promise.all([
           supabase
             .from("twf_game_nights")
             .select("*")
@@ -500,6 +552,11 @@ export default function Home() {
           supabase
             .from("twf_custom_questions")
             .select("id,created_by,game_key,question,created_at")
+            .eq("couple_id", c.id)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("twf_custom_games")
+            .select("id,couple_id,created_by,title,instructions,category,prompts")
             .eq("couple_id", c.id)
             .order("created_at", { ascending: false }),
           supabase
@@ -515,6 +572,7 @@ export default function Home() {
           ids = nights.map((x) => x.id);
         setHistory(nights);
         setCustomQuestions(q || []);
+        setCustomGames(cg || []);
         setResumableNight(active);
         const requestedRoom = new URLSearchParams(window.location.search).get("callRoom");
         const requestedNight = new URLSearchParams(window.location.search).get("callNight");
@@ -693,6 +751,36 @@ export default function Home() {
     else setCustomQuestions((q) => q.filter((x) => x.id !== id));
     setBusy(false);
   }
+  async function addCustomGame(input: { title: string; instructions: string; category: string; prompts: string[] }) {
+    if (!couple || !profile) return;
+    setBusy(true);
+    const { data, error } = await supabase.from("twf_custom_games").insert({
+      couple_id: couple.id,
+      created_by: profile.id,
+      title: input.title.trim(),
+      instructions: input.instructions.trim(),
+      category: input.category,
+      prompts: input.prompts.map((prompt) => prompt.trim()).filter(Boolean),
+    }).select("id,couple_id,created_by,title,instructions,category,prompts").single();
+    if (error) setMsg(error.message);
+    else {
+      setCustomGames((items) => [data, ...items]);
+      setMsg(`${data.title} was added to your game library.`);
+    }
+    setBusy(false);
+  }
+  async function deleteCustomGame(id: string) {
+    if (!profile) return;
+    setBusy(true);
+    const { error } = await supabase.from("twf_custom_games").delete().eq("id", id).eq("created_by", profile.id);
+    if (error) setMsg(error.message);
+    else {
+      setCustomGames((items) => items.filter((item) => item.id !== id));
+      setSelected((items) => items.filter((key) => key !== `custom:${id}`));
+      setMsg("Custom game deleted.");
+    }
+    setBusy(false);
+  }
   async function makeNight() {
     if (!couple || selected.length === 0) {
       setMsg("Choose at least one game first.");
@@ -724,7 +812,7 @@ export default function Home() {
   }
   function quickPlay() {
     const picks = gameCategories.flatMap((name) => {
-      const pool = GAMES.filter((item) => item.category === name);
+      const pool = gameCatalog.filter((item) => item.category === name);
       return pool.length ? [pool[Math.floor(Math.random() * pool.length)].key] : [];
     });
     setSelected(picks.slice(0, 5));
@@ -845,7 +933,7 @@ export default function Home() {
     return nextPlayers;
   }
   function getPromptPool(gameKey: string) {
-    const definition = GAMES.find((g) => g.key === gameKey) || GAMES[0],
+    const definition = gameCatalog.find((g) => g.key === gameKey) || GAMES[0],
       personal = customQuestions
         .filter((q) => q.game_key === gameKey)
         .map((q) => q.question),
@@ -858,7 +946,7 @@ export default function Home() {
   }
   async function pickFreshPrompt(gameKey: string, roundIndex = 0) {
     if (!night) return getPrompt(gameKey, 0);
-    const definition = GAMES.find((item) => item.key === gameKey);
+    const definition = gameCatalog.find((item) => item.key === gameKey);
     const fullPool = definition?.mode === "speed" ? definition.prompts : getPromptPool(gameKey);
     let candidatePool = definition?.mode === "speed"
       ? fullPool.filter((_, index) => index % 3 === roundIndex % 3)
@@ -882,12 +970,13 @@ export default function Home() {
     return data as string;
   }
   async function loadGameState(id: string) {
+    const loadId = ++gameStateLoadId.current;
     const { data: n } = await supabase
       .from("twf_game_nights")
       .select("*")
       .eq("id", id)
       .single();
-    if (!n) return;
+    if (!n || loadId !== gameStateLoadId.current) return;
     setNight(n);
     setGi(n.current_game_index);
     setRound(n.current_round);
@@ -896,6 +985,7 @@ export default function Home() {
       .select("*")
       .eq("game_night_id", id)
       .order("position");
+    if (loadId !== gameStateLoadId.current) return;
     const rows = sg || [];
     setSelected(rows.map((x) => x.game_key));
     const current = rows.find((x) => x.position === n.current_game_index);
@@ -906,6 +996,11 @@ export default function Home() {
         .eq("selected_game_id", current.id)
         .eq("round_number", n.current_round)
         .maybeSingle();
+      if (loadId !== gameStateLoadId.current) return;
+      if (r?.id !== loadedRoundId.current) {
+        loadedRoundId.current = r?.id || null;
+        setAnswer("");
+      }
       setActiveRound(r);
       if (r) {
         const [{ data: a }, { data: rt }] = await Promise.all([
@@ -919,6 +1014,7 @@ export default function Home() {
             .select("*")
             .eq("round_id", r.id),
         ]);
+        if (loadId !== gameStateLoadId.current) return;
         setAnswers(a || []);
         setRatings(rt || []);
         if (current.game_key === "higherLower") {
@@ -926,6 +1022,7 @@ export default function Home() {
             supabase.from("twf_number_secrets").select("secret_number").eq("round_id", r.id).maybeSingle(),
             supabase.from("twf_number_guesses").select("*").eq("round_id", r.id).order("created_at"),
           ]);
+          if (loadId !== gameStateLoadId.current) return;
           setOwnNumberSecret(secret?.secret_number ?? null);
           setNumberGuesses(guesses || []);
         } else {
@@ -935,7 +1032,16 @@ export default function Home() {
       } else {
         setAnswers([]);
         setRatings([]);
+        setOwnNumberSecret(null);
+        setNumberGuesses([]);
       }
+    } else {
+      loadedRoundId.current = null;
+      setActiveRound(null);
+      setAnswers([]);
+      setRatings([]);
+      setOwnNumberSecret(null);
+      setNumberGuesses([]);
     }
     await loadPlayers(id);
     if (n.status === "playing") setView("play");
@@ -961,18 +1067,24 @@ export default function Home() {
     if (!answer.trim() || answers.some((a) => a.user_id === profile!.id))
       return;
     setBusy(true);
-    const { error } = await supabase.rpc("twf_submit_answer", {
-      p_game_night_id: night!.id,
-      p_answer: answer,
-      p_prompt: prompt,
-      p_timed: game.mode === "speed",
-    });
-    if (error) setMsg(error.message);
-    else {
-      setAnswer("");
-      await loadGameState(night!.id);
+    setMsg("");
+    try {
+      const { error } = await supabase.rpc("twf_submit_answer", {
+        p_game_night_id: night!.id,
+        p_answer: answer,
+        p_prompt: prompt,
+        p_timed: game.mode === "speed",
+      });
+      if (error) setMsg(`Your answer was not locked: ${error.message}`);
+      else {
+        setAnswer("");
+        await loadGameState(night!.id);
+      }
+    } catch (error) {
+      setMsg(`Your answer was not locked: ${error instanceof Error ? error.message : "Please try again."}`);
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
   async function setSecretNumber() {
     if (!activeRound || !numberSecret.trim()) return;
@@ -1025,10 +1137,10 @@ export default function Home() {
     setBusy(false);
   }
   async function advance() {
-    const finalRound = game.key === "higherLower" ? 1 : 2,
+    const finalRound = lastRoundForGame(game.key),
       nextGi = round < finalRound ? gi : gi + 1,
       nextRound = round < finalRound ? round + 1 : 0,
-      nextGame = GAMES.find((g) => g.key === selected[nextGi]);
+      nextGame = gameCatalog.find((g) => g.key === selected[nextGi]);
     setBusy(true);
     const nextPrompt = nextGame ? await pickFreshPrompt(nextGame.key, nextRound) : "";
     if (nextGame && !nextPrompt) {
@@ -1114,7 +1226,7 @@ export default function Home() {
         msg={msg}
       />
     );
-  const game = GAMES.find((g) => g.key === selected[gi]) || GAMES[0],
+  const game = gameCatalog.find((g) => g.key === selected[gi]) || GAMES[0],
     prompt = activeRound?.prompt?.text || getPrompt(game.key, round),
     isHost = night?.created_by === profile.id,
     bothReady = players.length === 2 && players.every((p) => p.ready),
@@ -1143,7 +1255,7 @@ export default function Home() {
     pendingNumberGuess = numberGuesses.find((item) => !item.feedback),
     maxNumber = Math.pow(10, night?.number_digits || numberDigits) - 1,
     minNumber = (night?.number_digits || numberDigits) === 1 ? 0 : Math.pow(10, (night?.number_digits || numberDigits) - 1),
-    lastRound = game.key === "higherLower" ? 1 : 2,
+    lastRound = lastRoundForGame(game.key),
     creativeNeedsRating = ["draw", "caption", "story"].includes(game.key),
     myRating = ratings.find((item) => item.voter_id === profile.id)?.rating,
     displayPrompt =
@@ -1182,7 +1294,7 @@ export default function Home() {
       .reduce((sum, p) => sum + (p.total_score || 0), 0),
     firstLoss = history.findIndex((h) => h.winner_id !== profile.id),
     currentStreak = firstLoss === -1 ? myNightWins : firstLoss,
-    championRows = GAMES.map((g) => ({
+    championRows = gameCatalog.map((g) => ({
       game: g,
       winsMe: gameResults.filter(
         (r) => r.game_key === g.key && r.winner_id === profile.id,
@@ -1345,7 +1457,7 @@ export default function Home() {
                     className="secondary"
                     onClick={() => setView("games")}
                   >
-                    Browse all {GAMES.length} games
+                    Browse all {gameCatalog.length} games
                   </button>
                 </div>
               </div>
@@ -1373,7 +1485,7 @@ export default function Home() {
               <article>
                 <sup>♡</sup>
                 <small>GAMES AVAILABLE</small>
-                <h3>{GAMES.length}</h3>
+                <h3>{gameCatalog.length}</h3>
                 <p>Across five collections</p>
               </article>
               <article>
@@ -1408,7 +1520,7 @@ export default function Home() {
             <section className="recommendedDashboard">
               <div className="sectionHeading"><div><small>PICK SOMETHING FUN</small><h2>Recommended for you</h2></div><button onClick={() => setView("games")}>View all games →</button></div>
               <div className="recommendGrid">
-                {GAMES.slice(0, 4).map((item) => (
+                {gameCatalog.slice(0, 4).map((item) => (
                   <article key={item.key}>
                     <b className="gameIcon">{item.icon}</b>
                     <small>{item.category}</small>
@@ -1428,7 +1540,7 @@ export default function Home() {
                 <small>♡ EXPLORE TWOFOLD</small>
                 <h1>Find your next favorite</h1>
                 <p>
-                  All {GAMES.length} games are here—browse freely, then build your perfect
+                  All {gameCatalog.length} games are here—browse freely, then build your perfect
                   night.
                 </p>
               </div>
@@ -1439,13 +1551,20 @@ export default function Home() {
                 height={320}
               />
             </section>
+            <CustomGameManager
+              games={customGames}
+              currentUser={profile.id}
+              busy={busy}
+              add={addCustomGame}
+              remove={deleteCustomGame}
+            />
             <div className="categoryPills">
               {["All", ...gameCategories].map(
                 (c) => {
                   const count =
                     c === "All"
-                      ? GAMES.length
-                      : GAMES.filter((g) => g.category === c).length;
+                      ? gameCatalog.length
+                      : gameCatalog.filter((g) => g.category === c).length;
                   return (
                     <button
                       key={c}
@@ -1463,13 +1582,13 @@ export default function Home() {
               Showing{" "}
               <b>
                 {category === "All"
-                  ? GAMES.length
-                  : GAMES.filter((g) => g.category === category).length}
+                  ? gameCatalog.length
+                  : gameCatalog.filter((g) => g.category === category).length}
               </b>{" "}
               games
             </p>
             <div className="games browseGames">
-              {GAMES.filter(
+              {gameCatalog.filter(
                 (g) => category === "All" || g.category === category,
               ).map((g) => (
                 <article
@@ -1491,7 +1610,7 @@ export default function Home() {
                         <li key={prompt}>{prompt}</li>
                       ))}
                     </ol>
-                    <p className="promptCount">100 prompts available with repeat protection.</p>
+                    <p className="promptCount">{g.prompts.length} prompts available with repeat protection.</p>
                     <p className="scoringNote">
                       {g.mode === "speed"
                         ? "Correct answers earn 100 points. The first correct answer earns a 25-point speed bonus."
@@ -1599,7 +1718,7 @@ export default function Home() {
               {selected.length ? (
                 <ol className="selectedLineup">
                   {selected.map((key, index) => {
-                    const chosen = GAMES.find((item) => item.key === key);
+                    const chosen = gameCatalog.find((item) => item.key === key);
                     return (
                       <li key={key}>
                         <b>{index + 1}</b>
@@ -1645,7 +1764,7 @@ export default function Home() {
             </section>
             <div className="categoryGroups">
               {gameCategories.map((group, groupIndex) => {
-                const groupGames = GAMES.filter((item) => item.category === group);
+                const groupGames = gameCatalog.filter((item) => item.category === group);
                 const selectedCount = groupGames.filter((item) => selected.includes(item.key)).length;
                 return (
                   <details key={group} open={groupIndex === 0 || selectedCount > 0}>
@@ -1736,7 +1855,7 @@ export default function Home() {
               </div>
               <ol>
                 {selected.map((key, index) => {
-                  const chosen = GAMES.find((item) => item.key === key);
+                  const chosen = gameCatalog.find((item) => item.key === key);
                   return (
                     <li key={key}>
                       <span>{index + 1}</span>
@@ -1790,7 +1909,7 @@ export default function Home() {
               <i
                 style={{
                   width:
-                    ((gi * 3 + Math.min(round, 2) + 1) / (selected.length * 3)) * 100 + "%",
+                    ((gi + (Math.min(round, lastRound) + 1) / (lastRound + 1)) / selected.length) * 100 + "%",
                 }}
               />
             </div>
@@ -3086,6 +3205,47 @@ function DrawingPad({
     </div>
   );
 }
+function CustomGameManager({ games, currentUser, busy, add, remove }: {
+  games: CustomGame[];
+  currentUser: string;
+  busy: boolean;
+  add: (input: { title: string; instructions: string; category: string; prompts: string[] }) => void;
+  remove: (id: string) => void;
+}) {
+  const [title, setTitle] = useState(""),
+    [instructions, setInstructions] = useState(""),
+    [category, setCategory] = useState("Couple"),
+    [prompts, setPrompts] = useState("");
+  const promptList = prompts.split("\n").map((item) => item.trim()).filter(Boolean);
+  return (
+    <section className="accountCard customManager customGameManager">
+      <small>YOUR OWN GAMES</small>
+      <h2>Create a private couple game</h2>
+      <p>Add 2–50 questions or challenges, one per line. Only you and your linked partner can see and play it.</p>
+      <form onSubmit={(event) => {
+        event.preventDefault();
+        if (title.trim().length < 3 || instructions.trim().length < 10 || promptList.length < 2) return;
+        add({ title, instructions, category, prompts: promptList });
+        setTitle(""); setInstructions(""); setPrompts("");
+      }}>
+        <input value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} placeholder="Game name" />
+        <select value={category} onChange={(event) => setCategory(event.target.value)}>
+          {["Couple", "Competitive", "Party", "Creative", "Cooperative"].map((item) => <option key={item}>{item}</option>)}
+        </select>
+        <input value={instructions} maxLength={240} onChange={(event) => setInstructions(event.target.value)} placeholder="How should the game be played?" />
+        <textarea value={prompts} maxLength={6000} onChange={(event) => setPrompts(event.target.value)} placeholder={"Question or challenge 1\nQuestion or challenge 2"} />
+        <button className="primary" disabled={busy || title.trim().length < 3 || instructions.trim().length < 10 || promptList.length < 2 || promptList.length > 50}>Add game</button>
+      </form>
+      {games.length > 0 && <div className="customList">
+        {games.map((item) => <div key={item.id}>
+          <span><small>{item.category} · {item.prompts.length} prompts</small><b>{item.title}</b></span>
+          {item.created_by === currentUser && <button disabled={busy} onClick={() => remove(item.id)}>Delete</button>}
+        </div>)}
+      </div>}
+    </section>
+  );
+}
+
 function CustomQuestionManager({
   questions,
   currentUser,
