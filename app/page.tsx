@@ -290,19 +290,48 @@ export default function Home() {
     };
   }, [night?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- one subscription per active room
   useEffect(() => {
-    if (!night || view !== "lobby") return;
-    const reconcileLobby = () => void loadPlayers(night.id);
-    reconcileLobby();
+    if (!night || view !== "lobby" || !profile) return;
+    let active = true;
+    let reconciling = false;
+    const reconcileLobby = async () => {
+      if (reconciling) return;
+      reconciling = true;
+      try {
+        let currentPlayers = await loadPlayers(night.id);
+        if (!active) return;
+
+        // A room can be opened from the invite code, a notification, or Resume.
+        // Every lobby entry must perform the same idempotent ready handshake.
+        const currentPlayer = currentPlayers.find(
+          (player) => player.user_id === profile.id,
+        );
+        if (!currentPlayer?.ready) {
+          const { error } = await supabase.rpc("twf_join_game_night", {
+            p_game_night_id: night.id,
+          });
+          if (!active) return;
+          if (error) {
+            setMsg(`Could not mark you ready: ${error.message}`);
+            return;
+          }
+          currentPlayers = await loadPlayers(night.id);
+        }
+      } finally {
+        reconciling = false;
+      }
+    };
+    void reconcileLobby();
     const timer = window.setInterval(reconcileLobby, 2500);
     const refreshVisible = () => {
-      if (document.visibilityState === "visible") reconcileLobby();
+      if (document.visibilityState === "visible") void reconcileLobby();
     };
     document.addEventListener("visibilitychange", refreshVisible);
     return () => {
+      active = false;
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refreshVisible);
     };
-  }, [night?.id, view]); // eslint-disable-line react-hooks/exhaustive-deps -- lobby-only recovery when a realtime event is missed
+  }, [night?.id, view, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- lobby-only ready handshake and recovery
   useEffect(() => {
     if (!couple || !profile) return;
     const refreshQuestions = async () => {
@@ -788,11 +817,17 @@ export default function Home() {
     window.setTimeout(() => setCopied(false), 1800);
   }
   async function loadPlayers(id: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("twf_game_night_players")
       .select("*")
       .eq("game_night_id", id);
-    setPlayers(data || []);
+    if (error) {
+      setMsg(`Could not refresh the lobby: ${error.message}`);
+      return [];
+    }
+    const nextPlayers = data || [];
+    setPlayers(nextPlayers);
+    return nextPlayers;
   }
   function getPromptPool(gameKey: string) {
     const definition = GAMES.find((g) => g.key === gameKey) || GAMES[0],
