@@ -75,6 +75,8 @@ test("game-night timing is divided safely and supports controlled extensions", a
 test("every lobby entry marks the current player ready before waiting for the partner", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /view !== "lobby" \|\| !profile/);
+  assert.match(page, /latestNight\.status !== "lobby"/);
+  assert.match(page, /await loadGameState\(night\.id\)/);
   assert.match(page, /currentPlayer\?\.ready/);
   assert.match(page, /supabase\.rpc\("twf_join_game_night"/);
   assert.match(page, /Could not mark you ready/);

@@ -297,6 +297,21 @@ export default function Home() {
       if (reconciling) return;
       reconciling = true;
       try {
+        const { data: latestNight, error: nightError } = await supabase
+          .from("twf_game_nights")
+          .select("status")
+          .eq("id", night.id)
+          .single();
+        if (!active) return;
+        if (nightError) {
+          setMsg(`Could not refresh the room: ${nightError.message}`);
+          return;
+        }
+        if (latestNight.status !== "lobby") {
+          await loadGameState(night.id);
+          return;
+        }
+
         let currentPlayers = await loadPlayers(night.id);
         if (!active) return;
 
