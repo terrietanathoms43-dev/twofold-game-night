@@ -215,6 +215,13 @@ export default function Home() {
       navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
         .then((registration) => registration.update())
         .catch((error) => console.error("[twofold-notifications] Service worker registration failed", error));
+      const receiveWorkerMessage = (event: MessageEvent<{ type?: string; focusComposer?: boolean }>) => {
+        if (event.data?.type === "TWOFOLD_OPEN_CHAT") {
+          window.dispatchEvent(new CustomEvent("twofold:open-chat", { detail: { focusComposer: Boolean(event.data.focusComposer) } }));
+        }
+      };
+      navigator.serviceWorker.addEventListener("message", receiveWorkerMessage);
+      return () => navigator.serviceWorker.removeEventListener("message", receiveWorkerMessage);
     }
   }, []);
   useEffect(() => {
@@ -245,12 +252,6 @@ export default function Home() {
     }
     void loadPreferences();
     return () => { active = false; };
-  }, [preferenceCoupleId]);
-  useEffect(() => {
-    if (!preferenceCoupleId || new URLSearchParams(window.location.search).get("openChat") !== "1") return;
-    const focusComposer = new URLSearchParams(window.location.search).get("reply") === "1";
-    window.dispatchEvent(new CustomEvent("twofold:open-chat", { detail: { focusComposer } }));
-    window.history.replaceState({}, "", window.location.pathname);
   }, [preferenceCoupleId]);
   useEffect(() => {
     if (session?.user) loadAccount(session.user.id);

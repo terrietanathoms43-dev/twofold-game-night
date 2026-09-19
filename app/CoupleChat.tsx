@@ -26,7 +26,7 @@ function subscriptionUsesCurrentKey(subscription: PushSubscription) {
 }
 
 export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("openChat") === "1");
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [emojis, setEmojis] = useState(false);
@@ -46,7 +46,12 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   const knownCallIds = useRef(new Set<string>());
   const messagesLoaded = useRef(false);
   const callsLoaded = useRef(false);
+  const focusReplyOnMount = useRef(typeof window !== "undefined" && new URLSearchParams(window.location.search).get("reply") === "1");
   const readStorageKey = `twf-chat-read-${coupleId}-${userId}`;
+
+  function focusReplyComposer() {
+    [0, 150, 500].forEach((delay) => window.setTimeout(() => composerRef.current?.focus(), delay));
+  }
 
   useEffect(() => {
     let active = true;
@@ -121,7 +126,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
     const show = (event: Event) => {
       setOpen(true);
       if ((event as CustomEvent<{ focusComposer?: boolean }>).detail?.focusComposer) {
-        window.setTimeout(() => composerRef.current?.focus(), 100);
+        focusReplyComposer();
       }
     };
     window.addEventListener("twofold:open-chat", show);
@@ -133,6 +138,13 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       supabase.removeChannel(channel);
     };
   }, [coupleId, partnerName, readStorageKey, userId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("openChat") !== "1") return;
+    if (focusReplyOnMount.current) focusReplyComposer();
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
 
   useEffect(() => {
     openRef.current = open;
@@ -348,7 +360,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
         {notice && <button className="alertNotice" onClick={() => setNotice("")}>{notice} ×</button>}
         {emojis && <div className="coupleEmojiTray">{EMOJIS.map((emoji) => <button key={emoji} onClick={() => setDraft((value) => value + emoji)}>{emoji}</button>)}</div>}
         <div className="coupleCallActions"><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:check-call"))}>✓ Call check</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "audio" } }))}>☎ Voice call</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "video" } }))}>🎥 Video call</button></div>
-        <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input ref={composerRef} value={draft} maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim() || sending}>{sending ? "Sending…" : "Send"}</button></form>
+        <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input ref={composerRef} value={draft} maxLength={1000} enterKeyHint="send" onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim() || sending}>{sending ? "Sending…" : "Send"}</button></form>
         {alertsEnabled === null
           ? <div className="alertsStatus">Checking notification status…</div>
           : alertsEnabled

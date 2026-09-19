@@ -35,6 +35,8 @@ test("message notifications support replies and unread app badges", async () => 
   const worker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
   const chat = await readFile(new URL("../app/CoupleChat.tsx", import.meta.url), "utf8");
   assert.match(worker, /action:"reply"/);
+  assert.match(worker, /TWOFOLD_OPEN_CHAT/);
+  assert.match(worker, /client\.postMessage/);
   assert.match(worker, /self\.navigator\.setAppBadge/);
   assert.match(worker, /self\.navigator\.clearAppBadge/);
   assert.match(chat, /message\.sender_id !== userId/);
@@ -43,6 +45,8 @@ test("message notifications support replies and unread app badges", async () => 
   assert.match(chat, /window\.setInterval\(\(\) => void reconcile\(\), 3000\)/);
   assert.match(chat, /visibilitychange/);
   assert.match(chat, /pushRefreshAt\.current/);
+  assert.match(chat, /focusReplyComposer/);
+  assert.match(chat, /focusReplyOnMount/);
 });
 
 test("cloud preferences and personal export remain protected by RLS and authentication", async () => {
