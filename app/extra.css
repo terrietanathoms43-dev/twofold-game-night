@@ -2306,7 +2306,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .recommendGrid h3 { grid-column: 1 / -1; margin: 9px 0 0; color: #482054; font: 19px Georgia; }
 .recommendGrid p { grid-column: 1 / -1; min-height: 58px; margin: 0; color: var(--muted); line-height: 1.45; }
 .recommendGrid article > button { grid-column: 1 / -1; display: flex; justify-content: space-between; border: 0; border-radius: 9px; padding: 10px 13px; background: linear-gradient(100deg,#ef556e,#ff746d); color: #fff; font-weight: 900; }
-.libraryHero { background: linear-gradient(125deg,#48135d,#8c1e7e 62%,#c73187); }
+.libraryHero {
+  background: linear-gradient(125deg,#48135d,#8c1e7e 62%,#c73187);
+  color: #fff;
+}
+.libraryHero h1 {
+  color: #fff;
+  text-shadow: 0 2px 14px rgba(35, 7, 43, 0.32);
+}
+.libraryHero p {
+  color: #fff4fa;
+  font-weight: 600;
+  text-shadow: 0 1px 8px rgba(35, 7, 43, 0.34);
+}
+.libraryHero small {
+  color: #fff;
+  font-weight: 900;
+  text-shadow: 0 1px 8px rgba(35, 7, 43, 0.4);
+}
 .gameLibrary .categoryPills { position: sticky; top: 77px; z-index: 15; padding: 12px 0; background: rgba(255,249,248,.92); backdrop-filter: blur(14px); }
 .browseGames .gameCard { border-radius: 18px; background: #fff; box-shadow: 0 7px 19px rgba(82,37,86,.07); }
 .profilePair { background: linear-gradient(135deg,#fff,#fff1f7); }
