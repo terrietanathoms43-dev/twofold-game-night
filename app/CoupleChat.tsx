@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type Message = { id: string; sender_id: string; body: string; created_at: string };
@@ -29,47 +29,68 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [emojis, setEmojis] = useState(false);
-  const [seen, setSeen] = useState(0);
+  const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [alertsEnabled, setAlertsEnabled] = useState<boolean | null>(null);
   const [sending, setSending] = useState(false);
   const [calls, setCalls] = useState<CallEvent[]>([]);
   const [clock, setClock] = useState(() => Date.now());
   const endRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLInputElement | null>(null);
+  const alertCheckComplete = useRef(false);
+  const readStorageKey = `twf-chat-read-${coupleId}-${userId}`;
 
   useEffect(() => {
     let active = true;
     supabase.from("twf_couple_messages").select("id,sender_id,body,created_at")
       .eq("couple_id", coupleId).order("created_at").limit(300)
-      .then(({ data }) => { if (active) { const rows = (data as Message[]) || []; setMessages(rows); setSeen(rows.length); } });
+      .then(({ data }) => {
+        if (!active) return;
+        const rows = (data as Message[]) || [];
+        setMessages(rows);
+        const saved = localStorage.getItem(readStorageKey);
+        const initialReadAt = saved || new Date().toISOString();
+        if (!saved) localStorage.setItem(readStorageKey, initialReadAt);
+        setLastReadAt(initialReadAt);
+      });
     supabase.from("twf_call_invites").select("id,caller_id,mode,status,created_at,expires_at,answered_at,ended_at")
       .eq("couple_id", coupleId).order("created_at").limit(100)
       .then(({ data }) => { if (active) setCalls((data as CallEvent[]) || []); });
     const channel = supabase.channel(`twf-couple-chat:${coupleId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "twf_couple_messages", filter: `couple_id=eq.${coupleId}` }, ({ new: row }) => {
-        setMessages((current) => current.some((item) => item.id === row.id) ? current : [...current, row as Message]);
+        setMessages((current) => current.some((item) => item.id === row.id) ? current : [...current, row as Message].slice(-300));
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "twf_call_invites", filter: `couple_id=eq.${coupleId}` }, ({ new: row }) => {
         const next = row as CallEvent;
         setCalls((current) => current.some((item) => item.id === next.id) ? current.map((item) => item.id === next.id ? next : item) : [...current, next]);
       }).subscribe();
-    const show = () => setOpen(true);
+    const show = (event: Event) => {
+      setOpen(true);
+      if ((event as CustomEvent<{ focusComposer?: boolean }>).detail?.focusComposer) {
+        window.setTimeout(() => composerRef.current?.focus(), 100);
+      }
+    };
     window.addEventListener("twofold:open-chat", show);
     return () => { active = false; window.removeEventListener("twofold:open-chat", show); supabase.removeChannel(channel); };
-  }, [coupleId]);
+  }, [coupleId, readStorageKey]);
 
   useEffect(() => {
-    if (!calls.some((call) => call.status === "accepted" || call.status === "pending")) return;
+    if (!calls.some((call) => call.status === "accepted" || (call.status === "pending" && new Date(call.expires_at).getTime() > Date.now()))) return;
     const timer = window.setInterval(() => setClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [calls]);
 
   useEffect(() => {
     if (!open) return;
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-    const timer = window.setTimeout(() => setSeen(messages.length), 0);
+    endRef.current?.scrollIntoView({ behavior: "auto" });
+    const timer = window.setTimeout(() => {
+      const readAt = new Date().toISOString();
+      localStorage.setItem(readStorageKey, readAt);
+      setLastReadAt(readAt);
+      void navigator.clearAppBadge?.();
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [messages, open]);
+  }, [messages, open, readStorageKey]);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("twofold:chat-open-state", { detail: { open } }));
@@ -81,6 +102,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   useEffect(() => {
     let active = true;
     async function checkAlerts() {
+      if (alertCheckComplete.current) return;
       if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
         if (active) setAlertsEnabled(false);
         return;
@@ -107,7 +129,10 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
           updated_at: new Date().toISOString(),
         }, { onConflict: "endpoint" });
         if (error) throw error;
-        if (active) setAlertsEnabled(true);
+        if (active) {
+          alertCheckComplete.current = true;
+          setAlertsEnabled(true);
+        }
       } catch {
         if (active) {
           setAlertsEnabled(false);
@@ -116,7 +141,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       }
     }
     void checkAlerts();
-    const refresh = () => { if (document.visibilityState === "visible") void checkAlerts(); };
+    const refresh = () => { if (document.visibilityState === "visible" && !alertCheckComplete.current) void checkAlerts(); };
     document.addEventListener("visibilitychange", refresh);
     return () => {
       active = false;
@@ -139,7 +164,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       setNotice("Message could not be sent.");
     } else if (data) {
       setMessages((current) => current.some((item) => item.id === data.id) ? current : [...current, data as Message]);
-      void supabase.functions.invoke("notify-chat", { body: { coupleId } });
+      void supabase.functions.invoke("notify-chat", { body: { coupleId, messageId: data.id } });
     }
     setSending(false);
   }
@@ -147,6 +172,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   function callLabel(call: CallEvent) {
     const expired = call.status === "pending" && new Date(call.expires_at).getTime() < clock;
     if (expired) return call.caller_id === userId ? "No answer" : "Missed call";
+    if (call.status === "missed") return call.caller_id === userId ? "No answer" : "Missed call";
     if (call.status === "accepted") return "Ongoing call";
     if (call.status === "declined") return call.caller_id === userId ? "Call declined" : "Declined call";
     if (call.status === "ended") return "Call ended";
@@ -161,10 +187,10 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
     return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
   }
 
-  const timeline = [
+  const timeline = useMemo(() => [
     ...messages.map((item) => ({ kind: "message" as const, at: item.created_at, item })),
     ...calls.map((item) => ({ kind: "call" as const, at: item.created_at, item })),
-  ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()), [messages, calls]);
 
   async function enableAlerts() {
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) { setNotice("Push notifications are not supported on this device."); return; }
@@ -190,7 +216,38 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
     }
   }
 
-  const unread = open ? 0 : Math.max(0, messages.length - seen);
+  async function testAlerts() {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      setNotice("Notifications are not supported by this browser.");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setAlertsEnabled(false);
+      setNotice("Notifications are blocked. Open the browser's site settings for Twofold, change Notifications to Allow, then reload the page.");
+      return;
+    }
+    if (Notification.permission !== "granted") {
+      setAlertsEnabled(false);
+      setNotice("Select Enable alerts first, then allow notifications when the browser asks.");
+      return;
+    }
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.update();
+      await registration.showNotification("Twofold alerts are working", {
+        body: "This laptop can receive Twofold messages and call alerts.",
+        icon: "/twofold-icon-192-v2.png",
+        badge: "/twofold-icon-192-v2.png",
+        tag: "twofold-notification-test",
+        data: { url: "/?openChat=1" },
+      });
+      setNotice("A test alert was sent. If it did not appear, allow notifications for your browser in the laptop's system notification settings.");
+    } catch {
+      setNotice("The laptop could not display a test alert. Check both the browser site permission and the laptop's system notification settings.");
+    }
+  }
+
+  const unread = open || !lastReadAt ? 0 : messages.filter((message) => message.sender_id !== userId && message.created_at > lastReadAt).length;
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("twofold:chat-unread", { detail: { count: unread } }));
   }, [unread]);
@@ -209,12 +266,12 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       <div className="coupleChatComposer">
         {notice && <button className="alertNotice" onClick={() => setNotice("")}>{notice} ×</button>}
         {emojis && <div className="coupleEmojiTray">{EMOJIS.map((emoji) => <button key={emoji} onClick={() => setDraft((value) => value + emoji)}>{emoji}</button>)}</div>}
-        <div className="coupleCallActions"><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "audio" } }))}>☎ Voice call</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "video" } }))}>🎥 Video call</button></div>
-        <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input value={draft} maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim() || sending}>{sending ? "Sending…" : "Send"}</button></form>
+        <div className="coupleCallActions"><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:check-call"))}>✓ Call check</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "audio" } }))}>☎ Voice call</button><button onClick={() => window.dispatchEvent(new CustomEvent("twofold:start-call", { detail: { mode: "video" } }))}>🎥 Video call</button></div>
+        <form onSubmit={send}><button type="button" onClick={() => setEmojis((value) => !value)} aria-label="Emojis">😊</button><input ref={composerRef} value={draft} maxLength={1000} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…"/><button disabled={!draft.trim() || sending}>{sending ? "Sending…" : "Send"}</button></form>
         {alertsEnabled === null
           ? <div className="alertsStatus">Checking notification status…</div>
           : alertsEnabled
-            ? <div className="alertsStatus enabled">✓ Message &amp; call alerts enabled</div>
+            ? <div className="alertsStatus enabled"><span>✓ Message &amp; call alerts enabled</span><button type="button" onClick={testAlerts}>Send test alert</button></div>
             : <button className="enableAlerts" onClick={enableAlerts}>🔔 Enable message &amp; call alerts</button>}
       </div>
     </aside>}
