@@ -1522,7 +1522,7 @@ export default function Home() {
               <div className="sectionHeading"><div><small>PICK SOMETHING FUN</small><h2>Recommended for you</h2></div><button onClick={() => setView("games")}>View all games →</button></div>
               <div className="recommendGrid">
                 {gameCatalog.slice(0, 4).map((item) => (
-                  <article key={item.key}>
+                  <article key={item.key} className={`category-${item.category.toLowerCase()}`}>
                     <b className="gameIcon">{item.icon}</b>
                     <small>{item.category}</small>
                     <h3>{item.title}</h3>
@@ -1775,7 +1775,7 @@ export default function Home() {
                     </summary>
                     <div className="games">
                       {groupGames.map((g) => (
-                        <div role="button" tabIndex={0} key={g.key} className={selected.includes(g.key) ? "selected" : ""} onClick={() => setSelected((items) => items.includes(g.key) ? items.filter((item) => item !== g.key) : [...items, g.key])} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected((items) => items.includes(g.key) ? items.filter((item) => item !== g.key) : [...items, g.key]); } }}>
+                        <div role="button" tabIndex={0} key={g.key} className={`${selected.includes(g.key) ? "selected " : ""}category-${g.category.toLowerCase()}`} onClick={() => setSelected((items) => items.includes(g.key) ? items.filter((item) => item !== g.key) : [...items, g.key])} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected((items) => items.includes(g.key) ? items.filter((item) => item !== g.key) : [...items, g.key]); } }}>
                           <i>{selected.includes(g.key) ? "✓" : "+"}</i>
                           <button type="button" className="favoriteGame" aria-label={`${favorites.includes(g.key) ? "Remove" : "Add"} ${g.title} ${favorites.includes(g.key) ? "from" : "to"} favourites`} onClick={(event) => { event.stopPropagation(); toggleFavorite(g.key); }}>{favorites.includes(g.key) ? "★" : "☆"}</button>
                           <b className="gameIcon">{g.icon}</b>

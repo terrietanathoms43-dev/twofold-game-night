@@ -2442,3 +2442,208 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .alertsStatus.enabled button { border: 1px solid #b9d9c8; border-radius: 9px; padding: 7px 10px; background: #f3fff8; color: #256344; font-size: 13px; font-weight: 900; }
 @media(max-width:900px){.coupleChatPanel{inset:76px 8px 72px;width:auto;height:auto;max-height:none;border-radius:18px}}
 @media(max-width:560px){.coupleChatPanel{inset:8px 6px 72px;border-radius:15px}.coupleChatMessages>div:not(:last-child){max-width:92%}.coupleChatMessages>.coupleCallEvent{max-width:100%}}
+
+/* Colorful usability pass — shared visual language across the app */
+:root {
+  --violet: #7b3fc6;
+  --violet-dark: #4b155d;
+  --coral: #ff6e78;
+  --pink: #ec4f91;
+  --gold: #f8aa38;
+  --sky: #3aaed8;
+  --mint: #36ad84;
+  --soft-violet: #f3eaff;
+  --soft-pink: #fff0f6;
+  --focus-ring: rgba(123,63,198,.28);
+}
+
+body {
+  background:
+    radial-gradient(circle at 92% 4%, rgba(235,79,145,.09), transparent 24rem),
+    radial-gradient(circle at 8% 88%, rgba(123,63,198,.08), transparent 27rem),
+    #fff9fa;
+}
+
+button, a, input, select, textarea, [role="button"] { -webkit-tap-highlight-color: transparent; }
+button, [role="button"] { touch-action: manipulation; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, [role="button"]:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+input, select, textarea {
+  min-height: 44px;
+  border-color: #e4d5e1 !important;
+  box-shadow: 0 1px 0 rgba(73,21,86,.03);
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #9b65cf !important;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+.primary, .secondary, .google { min-height: 46px; border-radius: 12px; }
+.primary {
+  background: linear-gradient(105deg, var(--pink), var(--coral));
+  box-shadow: 0 10px 24px rgba(224,69,122,.22);
+}
+.secondary { border-color: #ddcbd9; color: #60266f; }
+.primary:not(:disabled):hover, .recommendGrid article > button:hover { filter: saturate(1.08) brightness(1.03); transform: translateY(-1px); }
+.primary:active, .secondary:active, button:active { transform: translateY(1px); }
+
+.shell > main > header {
+  position: sticky;
+  top: 0;
+  z-index: 28;
+  border-bottom-color: rgba(102,38,113,.12);
+  box-shadow: 0 5px 24px rgba(73,27,81,.045);
+}
+.shell > aside { box-shadow: 8px 0 30px rgba(70,25,78,.035); }
+.shell nav button { transition: background .18s ease, color .18s ease, transform .18s ease; }
+.shell nav button:not(.active):hover { background: #faf0f7; color: #6b2878; transform: translateX(2px); }
+.notificationButton:hover, .coupleCodeRow button:hover { background: var(--soft-pink); }
+
+.page { animation: colorful-page-in .24s ease-out both; }
+@keyframes colorful-page-in { from { opacity: .65; transform: translateY(4px); } }
+
+.dashboardGreeting h1, .sectionHeading h2, .coupleCardHead h2,
+.setupHead h1, .board > h1 { color: var(--violet-dark); }
+.homeDashboard .hero, .homeDashboard .resumeCard, .libraryHero {
+  border: 1px solid rgba(255,255,255,.18);
+  background:
+    radial-gradient(circle at 80% 34%, rgba(255,103,147,.42), transparent 23%),
+    linear-gradient(125deg,#421255,#771d77 53%,#c52b88);
+}
+.homeDashboard .hero { box-shadow: 0 20px 55px rgba(92,26,104,.22); }
+.homeDashboard .stats article { overflow: hidden; border: 1px solid #eadde7; }
+.homeDashboard .stats article::after {
+  content: "";
+  position: absolute;
+  width: 76px;
+  height: 76px;
+  right: -25px;
+  bottom: -30px;
+  border-radius: 50%;
+  background: rgba(235,79,145,.1);
+}
+.homeDashboard .stats article:nth-child(2)::after { background: rgba(123,63,198,.12); }
+.homeDashboard .stats article:nth-child(3)::after { background: rgba(248,170,56,.15); }
+.coupleDashboardCard, .joinbox, .recommendedDashboard article { box-shadow: 0 10px 28px rgba(75,27,84,.07); }
+
+.recommendGrid article, .browseGames .gameCard, .categoryGroups .games > div {
+  --category: var(--pink);
+  --category-soft: var(--soft-pink);
+  border-top: 4px solid var(--category);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.recommendGrid article:hover, .browseGames .gameCard:hover, .categoryGroups .games > div:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 15px 34px rgba(69,24,78,.12);
+}
+.category-competitive, .browseGames .gameCard.competitive { --category: var(--gold); --category-soft: #fff4dd; }
+.category-party, .browseGames .gameCard.party { --category: var(--violet); --category-soft: var(--soft-violet); }
+.category-creative, .browseGames .gameCard.creative { --category: var(--sky); --category-soft: #e6f8ff; }
+.category-cooperative, .browseGames .gameCard.cooperative { --category: var(--mint); --category-soft: #e8faf3; }
+.recommendGrid article .gameIcon, .browseGames .gameCard .gameIcon,
+.categoryGroups .games > div .gameIcon { background: var(--category-soft); color: var(--category); }
+.recommendGrid article > small, .browseGames .gameCard > small,
+.categoryGroups .games > div > small { color: var(--category); }
+.categoryGroups .games > div.selected {
+  border-color: var(--category);
+  background: linear-gradient(145deg,#fff,var(--category-soft));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--category) 15%, transparent);
+}
+.categoryGroups .games > div.selected > i { background: var(--category); border-color: var(--category); }
+
+.gameLibrary .categoryPills { border-bottom: 1px solid rgba(97,34,107,.08); }
+.categoryPills button { min-height: 40px; transition: .18s ease; }
+.categoryPills button:hover { border-color: #bd8ed0; background: #fbf3ff; }
+.categoryPills button.active {
+  border-color: transparent;
+  background: linear-gradient(105deg,#7132a1,#ad318d);
+  color: #fff;
+  box-shadow: 0 7px 18px rgba(104,42,132,.2);
+}
+.setupHead, .nightSettings, .lineupBuilder, .savedLineups {
+  border-radius: 20px;
+}
+.nightSettings label {
+  padding: 14px;
+  border: 1px solid #eadde7;
+  border-radius: 15px;
+  background: linear-gradient(145deg,#fff,#fff8fb);
+}
+.categoryGroups > details { box-shadow: 0 7px 22px rgba(72,26,82,.055); }
+.categoryGroups > details > summary { min-height: 68px; }
+.categoryGroups > details[open] > summary { background: linear-gradient(90deg,#fff6fa,#f7f0ff); }
+.emptyLineup {
+  padding: 22px;
+  border: 2px dashed #d9bfd5;
+  border-radius: 14px;
+  background: #fff9fc;
+  color: #76536f;
+  text-align: center;
+}
+
+.authBrand {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 78% 22%,rgba(255,105,146,.5),transparent 24%),
+    linear-gradient(145deg,#421353,#7f1f78 60%,#c52e86);
+}
+.authBrand::after {
+  content: "♡";
+  position: absolute;
+  right: -5%;
+  bottom: -12%;
+  color: rgba(255,255,255,.08);
+  font: 360px/1 Georgia;
+  transform: rotate(-10deg);
+}
+.authBrand > * { position: relative; z-index: 1; }
+.authPanel { background: linear-gradient(145deg,#fff,#fff7fb); }
+.authPanel > div {
+  padding: 30px;
+  border: 1px solid #eadce6;
+  border-radius: 24px;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 20px 55px rgba(67,20,75,.1);
+}
+.google:hover { background: #faf3ff; border-color: #cdb3d3; }
+
+@media (max-width: 900px) {
+  .mobileNav { background: rgba(255,255,255,.96); backdrop-filter: blur(18px); }
+  .mobileNav button { min-height: 53px; border-radius: 13px; }
+  .mobileNav button.active { background: linear-gradient(145deg,#f2e7ff,#ffe7f0); color: #762d87; }
+  .authPage { grid-template-columns: 1fr; }
+  .authBrand { min-height: 260px; padding: 48px 28px; }
+  .authBrand h1 { font-size: 46px; margin: 22px 0 12px; }
+  .authPanel { padding: 28px 16px 90px; }
+}
+
+@media (max-width: 560px) {
+  .page { padding-inline: 12px; }
+  .homeDashboard .stats {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    padding: 2px 1px 8px;
+  }
+  .homeDashboard .stats::-webkit-scrollbar { display: none; }
+  .homeDashboard .stats article { flex: 0 0 156px; scroll-snap-align: start; }
+  .libraryHero { min-height: 310px; padding: 26px 20px; }
+  .libraryHero h1 { font-size: 37px; }
+  .categoryPills { padding-inline: 2px; scroll-padding-left: 2px; }
+  .categoryPills button { min-height: 42px; }
+  .categoryGroups > details > summary { padding: 16px 14px; }
+  .categoryGroups summary b { font-size: 20px; }
+  .authBrand { min-height: 230px; }
+  .authBrand h1 { font-size: 40px; }
+  .authPanel > div { padding: 23px 18px; border-radius: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  .page { animation: none; }
+}
