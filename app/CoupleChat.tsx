@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabase";
 
 type Message = { id: string; sender_id: string; body: string; created_at: string };
 type CallEvent = { id: string; caller_id: string; mode: "audio" | "video"; status: string; created_at: string; expires_at: string; answered_at: string | null; ended_at: string | null };
+type ToastNotice = { id: string; kind: "message" | "call"; title: string; body: string };
 type Props = { coupleId: string; userId: string; partnerName: string };
 const EMOJIS = ["♡", "😂", "🥰", "😊", "😭", "🎉", "🔥", "👏", "✨", "🎮", "🏆", "💭"];
 // Public by design: browsers need this key to create push subscriptions.
@@ -34,10 +35,17 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   const [alertsEnabled, setAlertsEnabled] = useState<boolean | null>(null);
   const [sending, setSending] = useState(false);
   const [calls, setCalls] = useState<CallEvent[]>([]);
+  const [toast, setToast] = useState<ToastNotice | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   const endRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLInputElement | null>(null);
   const alertCheckComplete = useRef(false);
+  const pushRefreshAt = useRef(0);
+  const openRef = useRef(false);
+  const knownMessageIds = useRef(new Set<string>());
+  const knownCallIds = useRef(new Set<string>());
+  const messagesLoaded = useRef(false);
+  const callsLoaded = useRef(false);
   const readStorageKey = `twf-chat-read-${coupleId}-${userId}`;
 
   useEffect(() => {
@@ -47,6 +55,8 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       .then(({ data }) => {
         if (!active) return;
         const rows = (data as Message[]) || [];
+        knownMessageIds.current = new Set(rows.map((item) => item.id));
+        messagesLoaded.current = true;
         setMessages(rows);
         const saved = localStorage.getItem(readStorageKey);
         const initialReadAt = saved || new Date().toISOString();
@@ -55,15 +65,59 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       });
     supabase.from("twf_call_invites").select("id,caller_id,mode,status,created_at,expires_at,answered_at,ended_at")
       .eq("couple_id", coupleId).order("created_at").limit(100)
-      .then(({ data }) => { if (active) setCalls((data as CallEvent[]) || []); });
+      .then(({ data }) => {
+        if (!active) return;
+        const rows = (data as CallEvent[]) || [];
+        knownCallIds.current = new Set(rows.map((item) => item.id));
+        callsLoaded.current = true;
+        setCalls(rows);
+      });
+    void supabase.realtime.setAuth();
     const channel = supabase.channel(`twf-couple-chat:${coupleId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "twf_couple_messages", filter: `couple_id=eq.${coupleId}` }, ({ new: row }) => {
-        setMessages((current) => current.some((item) => item.id === row.id) ? current : [...current, row as Message].slice(-300));
+        const message = row as Message;
+        const unseen = !knownMessageIds.current.has(message.id);
+        knownMessageIds.current.add(message.id);
+        setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message].slice(-300));
+        if (unseen && message.sender_id !== userId && !openRef.current) {
+          setToast({ id: message.id, kind: "message", title: partnerName, body: message.body });
+        }
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "twf_call_invites", filter: `couple_id=eq.${coupleId}` }, ({ new: row }) => {
         const next = row as CallEvent;
+        const unseen = !knownCallIds.current.has(next.id);
+        knownCallIds.current.add(next.id);
         setCalls((current) => current.some((item) => item.id === next.id) ? current.map((item) => item.id === next.id ? next : item) : [...current, next]);
+        if (unseen && next.caller_id !== userId && next.status === "pending") {
+          setToast({ id: next.id, kind: "call", title: `Incoming ${next.mode} call`, body: `${partnerName} is calling.` });
+        }
       }).subscribe();
+    const reconcile = async () => {
+      const [{ data: messageRows }, { data: callRows }] = await Promise.all([
+        supabase.from("twf_couple_messages").select("id,sender_id,body,created_at").eq("couple_id", coupleId).order("created_at").limit(300),
+        supabase.from("twf_call_invites").select("id,caller_id,mode,status,created_at,expires_at,answered_at,ended_at").eq("couple_id", coupleId).order("created_at").limit(100),
+      ]);
+      if (!active) return;
+      const nextMessages = (messageRows as Message[]) || [];
+      const newestMessage = messagesLoaded.current
+        ? [...nextMessages].reverse().find((item) => item.sender_id !== userId && !knownMessageIds.current.has(item.id))
+        : undefined;
+      nextMessages.forEach((item) => knownMessageIds.current.add(item.id));
+      messagesLoaded.current = true;
+      setMessages(nextMessages);
+      const nextCalls = (callRows as CallEvent[]) || [];
+      const newestCall = callsLoaded.current
+        ? [...nextCalls].reverse().find((item) => item.caller_id !== userId && item.status === "pending" && !knownCallIds.current.has(item.id))
+        : undefined;
+      nextCalls.forEach((item) => knownCallIds.current.add(item.id));
+      callsLoaded.current = true;
+      setCalls(nextCalls);
+      if (newestCall) setToast({ id: newestCall.id, kind: "call", title: `Incoming ${newestCall.mode} call`, body: `${partnerName} is calling.` });
+      else if (newestMessage && !openRef.current) setToast({ id: newestMessage.id, kind: "message", title: partnerName, body: newestMessage.body });
+    };
+    const timer = window.setInterval(() => void reconcile(), 3000);
+    const refreshVisible = () => { if (document.visibilityState === "visible") void reconcile(); };
+    document.addEventListener("visibilitychange", refreshVisible);
     const show = (event: Event) => {
       setOpen(true);
       if ((event as CustomEvent<{ focusComposer?: boolean }>).detail?.focusComposer) {
@@ -71,8 +125,24 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       }
     };
     window.addEventListener("twofold:open-chat", show);
-    return () => { active = false; window.removeEventListener("twofold:open-chat", show); supabase.removeChannel(channel); };
-  }, [coupleId, readStorageKey]);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshVisible);
+      window.removeEventListener("twofold:open-chat", show);
+      supabase.removeChannel(channel);
+    };
+  }, [coupleId, partnerName, readStorageKey, userId]);
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => {
     if (!calls.some((call) => call.status === "accepted" || (call.status === "pending" && new Date(call.expires_at).getTime() > Date.now()))) return;
@@ -102,7 +172,6 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
   useEffect(() => {
     let active = true;
     async function checkAlerts() {
-      if (alertCheckComplete.current) return;
       if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
         if (active) setAlertsEnabled(false);
         return;
@@ -131,6 +200,7 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
         if (error) throw error;
         if (active) {
           alertCheckComplete.current = true;
+          pushRefreshAt.current = Date.now();
           setAlertsEnabled(true);
         }
       } catch {
@@ -141,7 +211,9 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
       }
     }
     void checkAlerts();
-    const refresh = () => { if (document.visibilityState === "visible" && !alertCheckComplete.current) void checkAlerts(); };
+    const refresh = () => {
+      if (document.visibilityState === "visible" && Date.now() - pushRefreshAt.current > 5 * 60 * 1000) void checkAlerts();
+    };
     document.addEventListener("visibilitychange", refresh);
     return () => {
       active = false;
@@ -252,6 +324,15 @@ export default function CoupleChat({ coupleId, userId, partnerName }: Props) {
     window.dispatchEvent(new CustomEvent("twofold:chat-unread", { detail: { count: unread } }));
   }, [unread]);
   return <div className={"coupleChatRoot" + (open ? " open" : "")}>
+    {toast && <button className={`coupleToast ${toast.kind}`} onClick={() => {
+      setToast(null);
+      setOpen(true);
+      window.setTimeout(() => composerRef.current?.focus(), 100);
+    }} aria-label={`Open ${toast.kind} notification`}>
+      <span>{toast.kind === "call" ? "☎" : "💬"}</span>
+      <div><b>{toast.title}</b><p>{toast.body}</p></div>
+      <i aria-hidden="true">×</i>
+    </button>}
     {open && <aside className="coupleChatPanel" aria-label="Couple chat">
       <header><div><b>{partnerName}</b><span>Your private couple conversation</span></div><button onClick={() => setOpen(false)} aria-label="Close chat">×</button></header>
       <div className="coupleChatMessages">

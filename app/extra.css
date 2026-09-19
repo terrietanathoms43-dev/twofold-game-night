@@ -117,6 +117,35 @@
   border-radius: 10px;
   z-index: 20;
 }
+.coupleToast {
+  position: fixed;
+  top: 84px;
+  right: 20px;
+  z-index: 125;
+  width: min(380px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.32);
+  border-radius: 16px;
+  background: linear-gradient(135deg,#4d185d,#9b267f);
+  color: #fff;
+  text-align: left;
+  box-shadow: 0 18px 45px rgba(58,18,67,.3);
+  animation: twofoldToastIn .22s ease-out;
+}
+.coupleToast.call { background: linear-gradient(135deg,#54206d,#d24e89); }
+.coupleToast > span { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; background: rgba(255,255,255,.17); font-size: 21px; }
+.coupleToast > div { min-width: 0; display: grid; gap: 3px; }
+.coupleToast b { font-size: 14px; }
+.coupleToast p { margin: 0; overflow: hidden; color: #fff7fb; font-size: 13px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.coupleToast i { align-self: start; font-style: normal; font-size: 18px; opacity: .8; }
+@keyframes twofoldToastIn { from { opacity: 0; transform: translateY(-10px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (max-width: 600px) {
+  .coupleToast { top: 12px; right: 12px; left: 12px; width: auto; padding-top: max(14px, env(safe-area-inset-top)); }
+}
 .joinbox {
   margin-top: 17px;
   padding: 22px;

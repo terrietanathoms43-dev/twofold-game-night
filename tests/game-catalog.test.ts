@@ -39,6 +39,10 @@ test("message notifications support replies and unread app badges", async () => 
   assert.match(worker, /self\.navigator\.clearAppBadge/);
   assert.match(chat, /message\.sender_id !== userId/);
   assert.match(chat, /twofold:chat-unread/);
+  assert.match(chat, /className={`coupleToast/);
+  assert.match(chat, /window\.setInterval\(\(\) => void reconcile\(\), 3000\)/);
+  assert.match(chat, /visibilitychange/);
+  assert.match(chat, /pushRefreshAt\.current/);
 });
 
 test("cloud preferences and personal export remain protected by RLS and authentication", async () => {
